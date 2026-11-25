@@ -28,6 +28,29 @@ STAMP = "$Y-$M-$D_$h.$m.$s"
 BISECTION_TEMPLATE = f"step.{STAMP}.nc"
 # Prognostic state (u, w, rho_zz, theta_m, scalars) and the diagnosed rho, theta and pressure_p.
 BISECTION_FIELDS = ("xtime", "Time", "u", "w", "rho_zz", "theta_m", "rho", "theta", "pressure_p")
+# Fields that atm_mpas_init_block (src/core_atmosphere/mpas_atm_core.F:366-617) computes before the first step and
+# that no package stream writes: written once, at the initial time (the first stream write of atm_core_run,
+# mpas_atm_core.F:701, after the init block), by the short run's "initdump" stream. Mesh-pool fields are
+# time-invariant; the diag and state fields are those of time level 1 after the init block and the initial
+# atm_compute_solve_diagnostics / mpas_reconstruct (mpas_atm_core.F:507-563). The stream only reads memory: it
+# changes no computed value, and every other output of the run is unchanged.
+INITDUMP_TEMPLATE = "initdump.nc"
+INITDUMP_FIELDS = (
+    "xtime",
+    # atm_compute_signs, inverses, atm_adv_coef_compression, atm_couple_coef_3rd_order
+    "invAreaCell", "invDvEdge", "invDcEdge", "invAreaTriangle", "edgesOnCell_sign", "edgesOnVertex_sign",
+    "zb_cell", "zb3_cell", "kiteForCell", "advCellsForEdge", "nAdvCellsForEdge", "adv_coefs", "adv_coefs_3rd",
+    # atm_initialize_deformation_weights, atm_compute_mesh_scaling, atm_compute_damping_coefs, bdy masks
+    "deformation_coef_c2", "deformation_coef_s2", "deformation_coef_cs", "deformation_coef_c", "deformation_coef_s",
+    "meshScalingDel2", "meshScalingDel4", "meshScalingRegionalCell", "meshScalingRegionalEdge",
+    "etp", "etm", "ewp", "ewm", "specZoneMaskCell", "specZoneMaskEdge", "specZoneMaskVertex", "nearestRelaxationCell",
+    # atm_init_coupled_diagnostics
+    "theta_m", "rho_zz", "ru", "rw", "rho_p", "rtheta_base", "rtheta_p", "exner", "exner_base", "pressure_p",
+    "pressure_base",
+    # initial atm_compute_solve_diagnostics and mpas_reconstruct
+    "v", "rho_edge", "vorticity", "divergence", "ke", "pv_edge", "pv_vertex", "pv_cell", "gradPVt", "gradPVn",
+    "uReconstructX", "uReconstructY", "uReconstructZ", "uReconstructZonal", "uReconstructMeridional",
+)
 PHASES = ("init", "steps", "forecast")
 PACKAGE_PREFIXES = ("namelist.", "streams.", "stream_list.")
 
@@ -154,6 +177,7 @@ def prepare(case, downloads, build, trial):
         "case": case, "init_case": init_case, "mesh": mesh, "init_file": init_file, "dt_seconds": dt,
         "bisection_steps": STEPS, "bisection_template": BISECTION_TEMPLATE,
         "bisection_fields": list(BISECTION_FIELDS) + ["scalars"],
+        "initdump_template": INITDUMP_TEMPLATE, "initdump_fields": list(INITDUMP_FIELDS),
         "history_template": history.get("filename_template"), "history_interval_seconds": history_seconds,
         "forecast_seconds": forecast_seconds, "forecast_steps": forecast_seconds // dt,
         "restart_template": restart_template, "restart_seconds": restart_seconds,
@@ -194,6 +218,12 @@ def prepare(case, downloads, build, trial):
             for field in BISECTION_FIELDS:
                 ET.SubElement(bisection, "var", {"name": field})
             ET.SubElement(bisection, "var_array", {"name": "scalars"})
+            initdump = ET.SubElement(root, "stream", {
+                "name": "initdump", "type": "output", "filename_template": INITDUMP_TEMPLATE,
+                "output_interval": "initial_only", "precision": "double",
+            })
+            for field in INITDUMP_FIELDS:
+                ET.SubElement(initdump, "var", {"name": field})
         tree.write(run / "streams.atmosphere", encoding="unicode")
     (trial / "plan.json").write_text(json.dumps(plan, indent=2) + "\n")
 
@@ -243,6 +273,14 @@ def validate(trial):
     expected = [timedelta(seconds=n * dt) for n in range(plan["bisection_steps"] + 1)]
     if offsets(steps, start) != expected or len(steps) != len(expected):
         raise ValueError(f"Bisection files {[p.name for p in steps]} do not hold steps 0..{plan['bisection_steps']}")
+
+    dump = trial / "steps" / plan["initdump_template"]
+    if not dump.is_file() or offsets([dump], start) != [timedelta(0)]:
+        raise ValueError(f"steps/{plan['initdump_template']} must hold one record at the initial time")
+    with nc.Dataset(dump) as data:
+        missing = [f for f in plan["initdump_fields"] if f not in data.variables]
+    if missing:
+        raise ValueError(f"steps/{plan['initdump_template']} lacks {missing}")
 
     forecast = trial / "forecast"
     history = files_at(forecast, plan["history_template"])

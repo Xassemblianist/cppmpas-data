@@ -26,7 +26,11 @@ Per case directory:
 - `init/`: the initial conditions written by `init_atmosphere_model`, with its namelist, streams and logs.
 - `steps/`: `step.*.nc`, the state after steps 0 to 10 in double precision (`u`, `w`, `rho_zz`, `theta_m`,
   the `scalars` array, and the diagnosed `rho`, `theta`, `pressure_p`), written by a 10-step run in which
-  every other output stream is off.
+  every other output stream is off. The same run writes `initdump.nc`: one record at the initial time with the
+  fields `atm_mpas_init_block` computes before the first step and no package stream writes (mesh coefficients,
+  `atm_init_coupled_diagnostics`, the initial solve diagnostics and reconstruction; list in `ci/cases.py`
+  `INITDUMP_FIELDS`). It is an ordinary MPAS output stream (`output_interval="initial_only"`), so the
+  executables are unchanged and the stream changes no computed value.
 - `forecast/`: a run of two package history intervals (at least 11 steps) with the package history stream
   unchanged and one restart checkpoint, written one step after the midpoint, with its `restart_timestamp`.
 - `package/`: the case's namelists, streams, stream lists, tables and README as published (without the mesh,
