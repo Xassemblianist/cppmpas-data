@@ -1,0 +1,8 @@
+# Role  File  URL
+build	mpas-v8.4.2-f34984b.tar.gz	https://codeload.github.com/MPAS-Dev/MPAS-Model/tar.gz/f34984b2c89353cf31c235b08d3b4acd96b37bb3
+build	mmm-physics-a4baf7f.tar.gz	https://codeload.github.com/NCAR/MMM-physics/tar.gz/a4baf7f3243d1db0dbc5f63473f895bdbdc05c30
+build	ugwp-c1c893e.tar.gz	https://codeload.github.com/NOAA-GSL/UGWP/tar.gz/c1c893edcf171af5639af60e3a3a528816f6cc2b
+build	mpas-data-c57dbc7.tar.gz	https://codeload.github.com/MPAS-Dev/MPAS-Data/tar.gz/c57dbc7be629802c6e848770a9e44b9bc602be41
+JW	jw_baroclinic_wave.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/test_cases/v7.0/jw_baroclinic_wave.tar.gz
+SC	supercell.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/test_cases/v7.0/supercell.tar.gz
+MW	mountain_wave.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/test_cases/v7.0/mountain_wave.tar.gz

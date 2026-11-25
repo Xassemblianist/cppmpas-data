@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Runs the selected cases twice on one MPI rank with the double-precision build of this commit's recipe,
+# requires identical output, and publishes the reference archive as release `tag`.
+name: mpasref
+run-name: ${{ inputs.tag }}
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: New release tag
+        type: string
+        required: true
+      flavour:
+        description: Reference precision
+        type: choice
+        options: [double]
+        default: double
+      cases:
+        description: Space- or comma-separated IDs from JW, SC, MW
+        type: string
+        default: JW
+permissions:
+  contents: write
+concurrency:
+  group: mpasref-${{ inputs.tag }}
+  cancel-in-progress: false
+jobs:
+  refs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REF_TAG: ${{ inputs.tag }}
+      FLAVOUR: ${{ inputs.flavour }}
+      CASE_LIST: ${{ inputs.cases }}
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache
+          df -h /
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: bash ci/host.sh refs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: mpasref-diagnostics
+          path: |
+            .ci-work/cpu.json
+            .ci-work/trials/*/*/plan.json
+            .ci-work/trials/*/*/*/log.*
+            .ci-work/trials/*/*/*/mpiexec.log
+            .ci-work/trials/*/*/*/namelist.*
+            .ci-work/trials/*/*/*/streams.*
+            .ci-work/reference/*/determinism.txt
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14

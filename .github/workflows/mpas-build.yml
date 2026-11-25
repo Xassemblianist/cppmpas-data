@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Builds MPAS-Atmosphere 8.4.2 in the pinned Debian 13 image and uploads it to the mpas-build release,
+# unless an asset with the same recipe hash is already there.
+name: mpas-build
+run-name: MPAS 8.4.2 build / ${{ inputs.flavour }}
+on:
+  workflow_dispatch:
+    inputs:
+      flavour:
+        description: Default real precision
+        type: choice
+        options: [double, single]
+        default: double
+permissions:
+  contents: write
+concurrency:
+  group: mpas-build-${{ inputs.flavour }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ github.token }}
+      FLAVOUR: ${{ inputs.flavour }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: bash ci/host.sh build
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: mpas-build-logs-${{ inputs.flavour }}
+          path: .ci-work/logs/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
