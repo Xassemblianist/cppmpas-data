@@ -60,7 +60,7 @@ fi
 selected=$(python3 ci/cases.py list "${CASE_LIST:?}")
 read -ra case_ids <<< "$selected"
 
-python3 - "$work/cpu.json" <<'PY'
+python3 - "$work/cpu.json" "${case_ids[@]}" <<'PY'
 import json
 from pathlib import Path
 import sys
@@ -83,6 +83,12 @@ print(cpu.get("model name", "unknown CPU"))
 missing = {"avx2", "fma", "sse4_1"} - (flags or set())
 if missing:
     sys.exit(f"The runner CPU lacks {sorted(missing)}, so glibc would select other libm variants")
+# The physics' vectorised logs and exps (libmvec) give different last bits on Intel and AMD CPUs: RG run on an Intel
+# Xeon 6975P-C (mpas842-dbl-rg-003) differed from the AMD runs (rg-001 EPYC 9V74, rg-002 EPYC 7763, identical to
+# each other) from the first step. The idealized cases have no such physics and are the same on both (mw-001 AMD,
+# mw-002 Intel). So a case with physics is a reference only from an AMD runner.
+if "RG" in sys.argv[2:] and cpu.get("vendor_id") != "AuthenticAMD":
+    sys.exit(f"RG needs an AMD runner (got {cpu.get('vendor_id')}): its physics' libmvec results depend on the CPU vendor")
 PY
 
 bash ci/inputs.sh cases "$work/downloads" "${case_ids[@]}"
