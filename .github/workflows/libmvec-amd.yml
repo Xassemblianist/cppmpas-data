@@ -28,6 +28,7 @@ jobs:
           [ "$vendor" = AuthenticAMD ] || { echo "Intel runner ($vendor): dispatch again for an AMD one"; exit 1; }
       - name: Tool and glibc source (pinned)
         run: |
+          python3 -m pip install --quiet numpy
           curl -fsSL "https://raw.githubusercontent.com/Xassemblianist/CPPWRF/$CPPWRF_COMMIT/tools/libmvec_tables.py" -o libmvec_tables.py
           echo "$TOOL_SHA256  libmvec_tables.py" | sha256sum -c -
           curl -fsSLO https://ftp.gnu.org/gnu/glibc/glibc-2.41.tar.xz
