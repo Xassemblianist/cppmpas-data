@@ -23,9 +23,9 @@ run), and the reference is published only when the two trials match.
 
 Cases: JW (Jablonowski-Williamson baroclinic wave), SC (supercell, Kessler), MW (mountain wave) from NCAR's
 idealized test-case packages, and RG: a real-data forecast on the 240-km x1.10242 mesh with the mesoscale_reference
-physics suite from one GFS analysis (inputs and changes in ci/rg/README.md). RG references come only from AMD runners:
-the physics' libmvec results differ in the last bits between Intel and AMD CPUs (see ci/host.sh); the idealized cases
-are the same on both.
+physics suite from one GFS analysis (inputs and changes in ci/rg/README.md). Every run preloads CPPWRF's Intel libmvec log/log10
+(ci/mvec_intel, see ci/ref.py), because the physics' vectorised logs differ in the last bits between Intel and AMD
+CPUs; with it the references are the same on any runner.
 
 Per case directory:
 

@@ -27,6 +27,19 @@ CORES = ("init_atmosphere", "atmosphere")
 MPI_ENV = {"OMPI_MCA_pml": "ob1", "OMPI_MCA_btl": "self"}
 MPIEXEC = ("mpiexec", "--allow-run-as-root", "-n", "1")
 WORK = Path("/work")
+# glibc libmvec's SSE4 vector log and log10 take an approximate reciprocal (rcpps) whose bits the hardware defines,
+# so physics loops gfortran vectorises give different last bits on Intel and AMD runners (rg-003 Intel vs rg-001/002
+# AMD differed from the first step). As CPPWRF does for WRF's references, every MPAS run preloads CPPWRF's
+# tests/phys/libmvec_intel.cpp (ci/mvec_intel, copied from CPPWRF 7fac5bf with its headers, SHA256SUMS there): those
+# two functions as an Intel CPU computes them, on every x86-64 CPU. The idealized dycore cases are unaffected.
+MVEC_PRELOAD = WORK / "libmvec_intel.so"
+
+
+def build_preload():
+    src = Path("/repo/ci/mvec_intel")
+    subprocess.run(["sha256sum", "--quiet", "-c", "SHA256SUMS"], cwd=src, check=True)
+    subprocess.run(["g++", "-std=c++20", "-O2", "-ffp-contract=off", "-fPIC", "-shared", "-I", str(src),
+                    str(src / "tests" / "phys" / "libmvec_intel.cpp"), "-o", str(MVEC_PRELOAD)], check=True)
 
 
 def sha256(path):
@@ -44,7 +57,7 @@ def launch(directory, binary):
     started = time.monotonic()
     with (directory / "mpiexec.log").open("wb") as log:
         result = subprocess.run([*MPIEXEC, str(binary)], cwd=directory, stdout=log, stderr=subprocess.STDOUT,
-                                env={**os.environ, **MPI_ENV}, preexec_fn=raise_stack_limit, check=False)
+                                env={**os.environ, **MPI_ENV, "LD_PRELOAD": str(MVEC_PRELOAD)}, preexec_fn=raise_stack_limit, check=False)
     logs = sorted(directory.glob("log.*.out"))
     errors = sorted(directory.glob("log.*.err"))
     # MPAS writes log.*.err only for error messages; a non-critical error (e.g. a stream that could not
@@ -132,6 +145,7 @@ def apt_snapshot():
 def main():
     downloads, build, target = WORK / "downloads", WORK / "build", WORK / "reference"
     target.mkdir()
+    build_preload()
     selected = cases.parse_cases(os.environ["CASE_LIST"])
     meta = target / "build-metadata"
     shutil.copytree(build / "metadata", meta, ignore=shutil.ignore_patterns("*.build.log"))
@@ -158,6 +172,8 @@ def main():
             "launcher": " ".join(MPIEXEC), "mpi_ranks": 1, "openmp": False, "openacc": False,
             "mpi_environment": MPI_ENV, "mpi_version": command("ompi_info", "--version"),
             "stack_limit": "raised to the hard limit",
+            "ld_preload": {"library": "CPPWRF tests/phys/libmvec_intel.cpp (Intel's _ZGVbN2v_log, _ZGVbN2v_log10)",
+                           "sources": "ci/mvec_intel (CPPWRF 7fac5bf)", "sha256": sha256(MVEC_PRELOAD)},
             "environment": {key: os.environ.get(key, "") for key in ("LC_ALL", "TZ", "OMP_NUM_THREADS")},
             "io": "SMIOL with PnetCDF (CDF-5)", "glibc_tunables": os.environ.get("GLIBC_TUNABLES", ""),
             "glibc": platform.libc_ver()[1],
