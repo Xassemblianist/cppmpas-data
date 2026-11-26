@@ -21,6 +21,10 @@ were built in. glibc selects its FMA/AVX2 libm variants; the workflow refuses a 
 and SSE4.1 and records the CPU. Each case runs as two independent trials (initialisation, short run, long
 run), and the reference is published only when the two trials match.
 
+Cases: JW (Jablonowski-Williamson baroclinic wave), SC (supercell, Kessler), MW (mountain wave) from NCAR's
+idealized test-case packages, and RG: a real-data forecast on the 240-km x1.10242 mesh with the mesoscale_reference
+physics suite from one GFS analysis (inputs and changes in ci/rg/README.md).
+
 Per case directory:
 
 - `init/`: the initial conditions written by `init_atmosphere_model`, with its namelist, streams and logs.

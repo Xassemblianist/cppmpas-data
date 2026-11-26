@@ -6,3 +6,5 @@ build	mpas-data-c57dbc7.tar.gz	https://codeload.github.com/MPAS-Dev/MPAS-Data/ta
 JW	jw_baroclinic_wave.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/test_cases/v7.0/jw_baroclinic_wave.tar.gz
 SC	supercell.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/test_cases/v7.0/supercell.tar.gz
 MW	mountain_wave.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/test_cases/v7.0/mountain_wave.tar.gz
+RG	x1.10242_static.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/atmosphere_meshes/x1.10242_static.tar.gz
+RG	rg-gfs-20261012T00.wps	WPS 4.6.0 ungrib of NCEP GFS analysis 2026-10-12 00 UTC (gfs.0p25 f000), Vtable.GFS; local file FILE:2026-10-12_00

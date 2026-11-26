@@ -22,7 +22,15 @@ CASES = {
     "JW": (2, "jw_baroclinic_wave.tar.gz", "x1.40962.grid.nc"),
     "SC": (5, "supercell.tar.gz", "supercell_grid.nc"),
     "MW": (6, "mountain_wave.tar.gz", "mtn_wave_grid.nc"),
+    # Real data: NCAR's published 240-km static file (static fields precomputed, so no geographic data set) and one
+    # GFS analysis as a WPS intermediate file; the namelists and streams are MPAS v8.4.2's generated defaults with
+    # the changes in ci/rg/README.md.
+    "RG": (7, "x1.10242_static.tar.gz", "x1.10242.static.nc"),
 }
+# RG's first-guess file: the release-safe name in `inputs`, and the name init_atmosphere reads (config_met_prefix
+# 'FILE' and config_start_time).
+RG_MET = ("rg-gfs-20261012T00.wps", "FILE:2026-10-12_00")
+RG_PACKAGE = Path(__file__).resolve().parent / "rg"
 STEPS = 10
 STAMP = "$Y-$M-$D_$h.$m.$s"
 BISECTION_TEMPLATE = f"step.{STAMP}.nc"
@@ -104,8 +112,28 @@ def flat_name(path):
     return path
 
 
+def stage_rg(downloads, package):
+    """RG: the static file and its graph partition file from NCAR's archive, the met file, and ci/rg's inputs."""
+    _, archive, mesh = CASES["RG"]
+    with tarfile.open(downloads / archive, "r:gz") as source:
+        for member in source.getmembers():
+            name = Path(member.name).name
+            if member.isfile() and name in {mesh, "x1.10242.graph.info"}:
+                with source.extractfile(member) as data, (package / flat_name(name)).open("xb") as out:
+                    shutil.copyfileobj(data, out)
+    if not (package / mesh).is_file():
+        raise ValueError(f"{archive} lacks the static file {mesh}")
+    shutil.copyfile(downloads / RG_MET[0], package / flat_name(RG_MET[1]))
+    for item in sorted(RG_PACKAGE.iterdir()):
+        if item.name.startswith(PACKAGE_PREFIXES):
+            shutil.copyfile(item, package / item.name)
+
+
 def stage_package(case, downloads, package):
     """Copy the case configuration, tables and mesh from the top directory of the package."""
+    if case == "RG":
+        stage_rg(downloads, package)
+        return
     _, archive, mesh = CASES[case]
     with tarfile.open(downloads / archive, "r:gz") as source:
         members = source.getmembers()
@@ -139,6 +167,11 @@ def prepare(case, downloads, build, trial):
         raise ValueError(f"{case} package does not select init case {init_case}")
     for name in ("namelist.init_atmosphere", "streams.init_atmosphere"):
         shutil.copyfile(package / name, init / name)
+    if case == "RG":
+        (init / RG_MET[1]).symlink_to(Path("..") / "package" / RG_MET[1])
+        if nml_value(init_text, "config_met_prefix") + ":" + nml_value(init_text, "config_start_time")[:13] \
+                != RG_MET[1]:
+            raise ValueError("RG init namelist does not read " + RG_MET[1])
     init_streams = ET.parse(init / "streams.init_atmosphere").getroot()
     if flat_name(stream(init_streams, "input").get("filename_template")) != mesh:
         raise ValueError(f"{case} init input is not {mesh}")
