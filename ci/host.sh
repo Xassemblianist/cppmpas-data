@@ -134,9 +134,12 @@ for block in blocks:
         elif key == "flags":
             flags = set(value.split()) if flags is None else flags & set(value.split())
 cpu["logical_cpus"] = len(blocks)
+meminfo = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines() if ":" in line)
+cpu["mem_total"] = meminfo["MemTotal"].strip()
+cpu["swap_total"] = meminfo["SwapTotal"].strip()
 cpu["flags_on_all_cpus"] = " ".join(sorted(flags or ()))
 Path(sys.argv[1]).write_text(json.dumps(cpu, sort_keys=True, indent=1) + "\n")
-print(cpu.get("model name", "unknown CPU"))
+print(cpu.get("model name", "unknown CPU"), cpu["logical_cpus"], "CPUs, MemTotal", cpu["mem_total"], "SwapTotal", cpu["swap_total"])
 # glibc's libm ifuncs select the FMA variants with AVX2+FMA; libmvec and the rounding functions use SSE4.1.
 missing = {"avx2", "fma", "sse4_1"} - (flags or set())
 if missing:

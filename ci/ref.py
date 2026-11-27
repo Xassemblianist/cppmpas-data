@@ -53,22 +53,33 @@ def raise_stack_limit():
     resource.setrlimit(resource.RLIMIT_STACK, (hard, hard))
 
 
+def run_measured(args, **kwargs):
+    """Run args to completion; return (exit status, peak resident set size in KiB). wait4's ru_maxrss is the
+    largest of the child and every descendant it waited for, so under mpiexec it is the model process's peak."""
+    process = subprocess.Popen(args, **kwargs)
+    _, status, usage = os.wait4(process.pid, 0)
+    process.returncode = os.waitstatus_to_exitcode(status)
+    return process.returncode, usage.ru_maxrss
+
+
 def launch(directory, binary):
     started = time.monotonic()
     with (directory / "mpiexec.log").open("wb") as log:
-        result = subprocess.run([*MPIEXEC, str(binary)], cwd=directory, stdout=log, stderr=subprocess.STDOUT,
-                                env={**os.environ, **MPI_ENV, "LD_PRELOAD": str(MVEC_PRELOAD)}, preexec_fn=raise_stack_limit, check=False)
+        returncode, peak_kib = run_measured(
+            [*MPIEXEC, str(binary)], cwd=directory, stdout=log, stderr=subprocess.STDOUT,
+            env={**os.environ, **MPI_ENV, "LD_PRELOAD": str(MVEC_PRELOAD)}, preexec_fn=raise_stack_limit)
+    print(f"{directory.name}: {time.monotonic() - started:.1f} s, peak RSS {peak_kib} KiB", flush=True)
     logs = sorted(directory.glob("log.*.out"))
     errors = sorted(directory.glob("log.*.err"))
     # MPAS writes log.*.err only for error messages; a non-critical error (e.g. a stream that could not
     # be written) does not stop the model, so any .err file fails the run.
-    if result.returncode or len(logs) != 1 or errors:
+    if returncode or len(logs) != 1 or errors:
         for path in (directory / "mpiexec.log", *logs, *errors):
             tail = path.read_text(errors="replace").splitlines()[-80:]
             print(f"--- {path}", *tail, sep="\n", file=sys.stderr)
-        raise RuntimeError(f"MPAS failed in {directory}: exit code {result.returncode}, "
+        raise RuntimeError(f"MPAS failed in {directory}: exit code {returncode}, "
                            f"{len(logs)} log files, {len(errors)} error logs")
-    return round(time.monotonic() - started, 3)
+    return round(time.monotonic() - started, 3), peak_kib
 
 
 def build_tables(directory, binary):
@@ -78,15 +89,15 @@ def build_tables(directory, binary):
     (atmphys_build_tables_thompson.F:45-49), so the tables and its closing message are checked here."""
     started = time.monotonic()
     with (directory / cases.TABLES_LOG).open("wb") as log:
-        result = subprocess.run([str(binary)], cwd=directory, stdout=log, stderr=subprocess.STDOUT,
-                                env={**os.environ, "LD_PRELOAD": str(MVEC_PRELOAD)}, preexec_fn=raise_stack_limit,
-                                check=False)
+        returncode, peak_kib = run_measured(
+            [str(binary)], cwd=directory, stdout=log, stderr=subprocess.STDOUT,
+            env={**os.environ, "LD_PRELOAD": str(MVEC_PRELOAD)}, preexec_fn=raise_stack_limit)
     text = (directory / cases.TABLES_LOG).read_text(errors="replace")
     missing = [name for name in cases.THOMPSON_TABLES if not (directory / name).is_file()]
-    if result.returncode or missing or "Finished building all tables." not in text:
+    if returncode or missing or "Finished building all tables." not in text:
         print(f"--- {directory / cases.TABLES_LOG}", *text.splitlines()[-80:], sep="\n", file=sys.stderr)
-        raise RuntimeError(f"build_tables failed in {directory}: exit code {result.returncode}, missing {missing}")
-    return round(time.monotonic() - started, 3)
+        raise RuntimeError(f"build_tables failed in {directory}: exit code {returncode}, missing {missing}")
+    return round(time.monotonic() - started, 3), peak_kib
 
 
 def outputs(directory):
@@ -218,20 +229,22 @@ def main():
         case_path = target / case
         case_path.mkdir()
         replicas = WORK / "trials" / case
-        timings = {}
+        timings, peaks = {}, {}
         for trial in ("A", "B"):
             trial_path = replicas / trial
             cases.prepare(case, downloads, build, trial_path)
-            timings[trial] = {}
+            timings[trial], peaks[trial] = {}, {}
             phases = cases.plan_phases(json.loads((trial_path / "plan.json").read_text()))
             for phase in phases:
                 if phase == "tables":
                     print(f"{case}/{trial}/{phase}: build_tables", flush=True)
-                    timings[trial][phase] = build_tables(trial_path / phase, build / "bin" / "build_tables")
+                    timings[trial][phase], peaks[trial][phase] = build_tables(
+                        trial_path / phase, build / "bin" / "build_tables")
                     continue
-                core = "init_atmosphere" if phase == "init" else "atmosphere"
+                core = "init_atmosphere" if phase in cases.INIT_CORE_PHASES else "atmosphere"
                 print(f"{case}/{trial}/{phase} on one MPI rank", flush=True)
-                timings[trial][phase] = launch(trial_path / phase, build / "bin" / f"{core}_model")
+                timings[trial][phase], peaks[trial][phase] = launch(
+                    trial_path / phase, build / "bin" / f"{core}_model")
             cases.validate(trial_path)
 
         compare_trials(replicas / "A", replicas / "B", case_path / "determinism.txt", phases)
@@ -243,8 +256,11 @@ def main():
             "mesh": plan["mesh"], "mesh_sha256": sha256(replicas / "A" / "package" / plan["mesh"]),
             "partition": "none (one rank reads no graph partition file)",
             "package_files_sha256": {p.name: sha256(p) for p in sorted((case_path / "package").iterdir())},
-            "seconds": timings, "plan": plan,
+            "seconds": timings, "peak_rss_kib": peaks, "plan": plan,
         }
+        if plan.get("geog_datasets"):
+            receipt["cases"][case]["geog_sha256"] = {
+                f"{name}.tar.bz2": sha256(downloads / f"{name}.tar.bz2") for name in plan["geog_datasets"]}
         if plan.get("thompson_tables"):
             receipt["cases"][case]["thompson_tables_sha256"] = {
                 name: sha256(case_path / "tables" / name) for name in plan["thompson_tables"]}

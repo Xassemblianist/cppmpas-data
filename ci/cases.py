@@ -28,19 +28,47 @@ CASES = {
     # GFS analysis as a WPS intermediate file; the namelists and streams are MPAS v8.4.2's generated defaults with
     # the changes in ci/rg/README.md.
     "RG": (7, "x1.10242_static.tar.gz", "x1.10242.static.nc"),
-    # RG24: the same case and inputs, with a 24 h forecast (history every RG24_HISTORY_SECONDS, one restart one step
+    # RG24: the same case and inputs, with a 24 h forecast (LONG_CASES: history every 3 h, one restart one step
     # after 12 h). RG's own forecast is two history intervals (2 h).
     "RG24": (7, "x1.10242_static.tar.gz", "x1.10242.static.nc"),
     # RGCP and RGCP24: RG and RG24 with config_physics_suite = 'convection_permitting' (ci/rgcp/README.md). A
     # fourth phase, tables, runs MPAS's build_tables before the init, and both model runs read its Thompson tables.
     "RGCP": (7, "x1.10242_static.tar.gz", "x1.10242.static.nc"),
     "RGCP24": (7, "x1.10242_static.tar.gz", "x1.10242.static.nc"),
+    # RG60 and RG60L: RG's recipe on NCAR's 60-km quasi-uniform mesh x1.163842, from NCAR's published static file
+    # (ci/rg60/README.md). RG60 is RG's short case; RG60L the long forecast.
+    "RG60": (7, "x1.163842_static.tar.gz", "x1.163842.static.nc"),
+    "RG60L": (7, "x1.163842_static.tar.gz", "x1.163842.static.nc"),
+    # RGVR and RGVRL: RG's recipe on NCAR's 92-25 km variable-resolution mesh x4.163842 (ci/rgvr/README.md). NCAR
+    # publishes no static file for it, so a fifth phase, static, runs init_atmosphere's static and GWDO stages on the
+    # grid file with WPS geographic data first, and the init reads that trial's static file.
+    "RGVR": (7, "x4.163842.tar.gz", "x4.163842.grid.nc"),
+    "RGVRL": (7, "x4.163842.tar.gz", "x4.163842.grid.nc"),
 }
-RG_CASES = ("RG", "RG24", "RGCP", "RGCP24")
+RG_CASES = ("RG", "RG24", "RGCP", "RGCP24", "RG60", "RG60L", "RGVR", "RGVRL")
 CP_CASES = ("RGCP", "RGCP24")
-DAY_CASES = ("RG24", "RGCP24")
-RG24_FORECAST_SECONDS = 86400
-RG24_HISTORY_SECONDS = 3 * 3600
+STATIC_CASES = ("RGVR", "RGVRL")
+# Long cases: (forecast seconds, history interval seconds); one restart one step after the midpoint.
+LONG_CASES = {
+    "RG24": (86400, 3 * 3600),
+    "RGCP24": (86400, 3 * 3600),
+    "RG60L": (6 * 3600, 3 * 3600),
+    "RGVRL": (3 * 3600, 3 * 3600),
+}
+# Long cases on the 163842-cell meshes run no 10-step bisection phase (their short case has it), so that the two
+# trials' forecasts fit in one runner job.
+NO_STEPS_CASES = ("RG60L", "RGVRL")
+# Each real-data case's ci/ package directory and the graph file kept from its mesh archive.
+RG_PACKAGES = {case: ("rg", "x1.10242.graph.info") for case in ("RG", "RG24", "RGCP", "RGCP24")}
+RG_PACKAGES.update({case: ("rg60", "x1.163842.graph.info") for case in ("RG60", "RG60L")})
+RG_PACKAGES.update({case: ("rgvr", "x4.163842.graph.info") for case in STATIC_CASES})
+# The WPS geographic data sets the static stage reads (mpas_init_atm_static.F, mpas_init_atm_gwd.F, for the default
+# config_*_data options): each tarball holds one top-level directory of that name, extracted under GEOG_DIR, which
+# namelist.init_atmosphere.static names as config_geog_data_path.
+GEOG_DATASETS = ("topo_gmted2010_30s", "modis_landuse_20class_30s", "soiltype_top_30s", "soiltemp_1deg",
+                 "greenfrac_fpar_modis", "albedo_modis", "maxsnowalb_modis")
+GEOG_DIR = Path("/work/geog")
+STATIC_SUFFIX = ".static"  # namelist.init_atmosphere.static and streams.init_atmosphere.static
 # The namelist.atmosphere options the convection_permitting cases change in RG's package.
 CP_NAMELIST = {"config_physics_suite": "'convection_permitting'"}
 # The look-up tables that thompson_init reads with status='OLD' (module_mp_thompson.F:862-965) and build_tables
@@ -51,7 +79,7 @@ TABLES_LOG = "build_tables.log"
 # RG's first-guess file: the release-safe name in `inputs`, and the name init_atmosphere reads (config_met_prefix
 # 'FILE' and config_start_time).
 RG_MET = ("rg-gfs-20261012T00.wps", "FILE:2026-10-12_00")
-RG_PACKAGE = Path(__file__).resolve().parent / "rg"
+CI_DIR = Path(__file__).resolve().parent
 STEPS = 10
 STAMP = "$Y-$M-$D_$h.$m.$s"
 BISECTION_TEMPLATE = f"step.{STAMP}.nc"
@@ -82,6 +110,8 @@ INITDUMP_FIELDS = (
 )
 PHASES = ("init", "steps", "forecast")
 CP_PHASES = ("tables",) + PHASES
+STATIC_PHASES = ("static",) + PHASES
+INIT_CORE_PHASES = ("static", "init")  # run by init_atmosphere_model
 
 
 def plan_phases(plan):
@@ -139,19 +169,37 @@ def flat_name(path):
     return path
 
 
+def extract_geog(downloads):
+    """Extract the geographic data sets once per run under GEOG_DIR (both trials read the same files)."""
+    marker = GEOG_DIR / ".complete"
+    if marker.is_file():
+        return
+    GEOG_DIR.mkdir(parents=True)
+    for name in GEOG_DATASETS:
+        with tarfile.open(downloads / f"{name}.tar.bz2", "r:bz2") as source:
+            members = source.getmembers()
+            tops = {Path(m.name).parts[0] for m in members if Path(m.name).parts}
+            if tops != {name}:
+                raise ValueError(f"{name}.tar.bz2 holds {sorted(tops)}, expected one directory {name}")
+            source.extractall(GEOG_DIR, members=members, filter="data")
+    marker.write_text("\n".join(GEOG_DATASETS) + "\n")
+
+
 def stage_rg(case, downloads, package):
-    """RG: the static file and its graph partition file from NCAR's archive, the met file, and ci/rg's inputs."""
-    _, archive, mesh = CASES["RG"]  # RG24, RGCP and RGCP24 use RG's inputs
+    """RG cases: the static (or grid) file and its graph partition file from NCAR's archive, the met file, and the
+    case's ci/ package directory."""
+    _, archive, mesh = CASES[case]
+    directory, graph = RG_PACKAGES[case]
     with tarfile.open(downloads / archive, "r:gz") as source:
         for member in source.getmembers():
             name = Path(member.name).name
-            if member.isfile() and name in {mesh, "x1.10242.graph.info"}:
+            if member.isfile() and name in {mesh, graph}:
                 with source.extractfile(member) as data, (package / flat_name(name)).open("xb") as out:
                     shutil.copyfileobj(data, out)
     if not (package / mesh).is_file():
         raise ValueError(f"{archive} lacks the static file {mesh}")
     shutil.copyfile(downloads / RG_MET[0], package / flat_name(RG_MET[1]))
-    for item in sorted(RG_PACKAGE.iterdir()):
+    for item in sorted((CI_DIR / directory).iterdir()):
         if item.name.startswith(PACKAGE_PREFIXES):
             shutil.copyfile(item, package / item.name)
     if case in CP_CASES:
@@ -194,7 +242,29 @@ def prepare(case, downloads, build, trial):
 
     init = trial / "init"
     init.mkdir()
-    (init / mesh).symlink_to(Path("..") / "package" / mesh)
+    init_input = mesh
+    if case in STATIC_CASES:
+        # static: init_atmosphere's static and GWDO stages on the grid file; the init then reads its static file.
+        static = trial / "static"
+        static.mkdir()
+        (static / mesh).symlink_to(Path("..") / "package" / mesh)
+        static_text = (package / ("namelist.init_atmosphere" + STATIC_SUFFIX)).read_text()
+        for key, value in (("config_static_interp", "true"), ("config_native_gwd_static", "true"),
+                           ("config_vertical_grid", "false"), ("config_met_interp", "false"),
+                           ("config_geog_data_path", str(GEOG_DIR) + "/")):
+            found = nml_value(static_text, key)
+            if (found if key == "config_geog_data_path" else found.lower().strip(".")) != value:
+                raise ValueError(f"{case} static namelist must set {key} = {value}")
+        for name in ("namelist.init_atmosphere", "streams.init_atmosphere"):
+            shutil.copyfile(package / (name + STATIC_SUFFIX), static / name)
+        static_streams = ET.parse(static / "streams.init_atmosphere").getroot()
+        if flat_name(stream(static_streams, "input").get("filename_template")) != mesh:
+            raise ValueError(f"{case} static input is not {mesh}")
+        init_input = flat_name(stream(static_streams, "output").get("filename_template"))
+        (init / init_input).symlink_to(Path("..") / "static" / init_input)
+        extract_geog(downloads)
+    else:
+        (init / mesh).symlink_to(Path("..") / "package" / mesh)
     init_text = (package / "namelist.init_atmosphere").read_text()
     if int(nml_value(init_text, "config_init_case")) != init_case:
         raise ValueError(f"{case} package does not select init case {init_case}")
@@ -206,8 +276,8 @@ def prepare(case, downloads, build, trial):
                 != RG_MET[1]:
             raise ValueError("RG init namelist does not read " + RG_MET[1])
     init_streams = ET.parse(init / "streams.init_atmosphere").getroot()
-    if flat_name(stream(init_streams, "input").get("filename_template")) != mesh:
-        raise ValueError(f"{case} init input is not {mesh}")
+    if flat_name(stream(init_streams, "input").get("filename_template")) != init_input:
+        raise ValueError(f"{case} init input is not {init_input}")
     init_file = flat_name(stream(init_streams, "output").get("filename_template"))
 
     atm_text = (package / "namelist.atmosphere").read_text()
@@ -241,8 +311,10 @@ def prepare(case, downloads, build, trial):
         raise ValueError(f"{case} restart template {restart_template!r} must be timestamped and distinct")
     # Two history intervals; one checkpoint, one step after the midpoint, so it is not at a history time.
     forecast_seconds = max(2 * history_seconds, (STEPS + 1) * dt)
-    if case in DAY_CASES:
-        history_seconds, forecast_seconds = RG24_HISTORY_SECONDS, RG24_FORECAST_SECONDS
+    if case in LONG_CASES:
+        forecast_seconds, history_seconds = LONG_CASES[case]
+        if forecast_seconds % history_seconds or history_seconds % dt:
+            raise ValueError(f"{case} forecast {forecast_seconds} s, history {history_seconds} s, dt {dt} s disagree")
     restart_seconds = (forecast_seconds // (2 * dt) + 1) * dt
     plan = {
         "case": case, "init_case": init_case, "mesh": mesh, "init_file": init_file, "dt_seconds": dt,
@@ -257,8 +329,18 @@ def prepare(case, downloads, build, trial):
     if case in CP_CASES:
         plan.update(phases=list(CP_PHASES), thompson_tables=list(THOMPSON_TABLES))
         (trial / "tables").mkdir()
+    if case in STATIC_CASES:
+        plan.update(phases=list(STATIC_PHASES), static_file=init_input,
+                    geog_datasets=list(GEOG_DATASETS), geog_data_path=str(GEOG_DIR) + "/")
+    if case in NO_STEPS_CASES:
+        plan.update(phases=[phase for phase in plan_phases(plan) if phase != "steps"])
+        for key in ("bisection_steps", "bisection_template", "bisection_fields", "initdump_template",
+                    "initdump_fields"):
+            del plan[key]
 
     for phase, seconds in (("steps", STEPS * dt), ("forecast", forecast_seconds)):
+        if phase not in plan_phases(plan):
+            continue
         run = trial / phase
         run.mkdir()
         (run / init_file).symlink_to(Path("..") / "init" / init_file)
@@ -280,7 +362,7 @@ def prepare(case, downloads, build, trial):
         restart = stream(root, "restart")
         if phase == "forecast":
             restart.set("output_interval", duration(restart_seconds))
-            if case in DAY_CASES:
+            if case in LONG_CASES:
                 stream(root, "output").set("output_interval", duration(history_seconds))
         else:
             restart.set("output_interval", "none")
@@ -351,6 +433,18 @@ def validate(trial):
             for phase in ("steps", "forecast"):
                 if (trial / phase / name).resolve() != (tables / name).resolve():
                     raise ValueError(f"{phase}/{name} does not read tables/{name}")
+    if plan.get("static_file"):
+        static = trial / "static"
+        written = sorted(p.name for p in static.glob("*.nc") if p.is_file() and not p.is_symlink())
+        if written != [plan["static_file"]]:
+            raise ValueError(f"static/ wrote {written}, expected {plan['static_file']}")
+        if (trial / "init" / plan["static_file"]).resolve() != (static / plan["static_file"]).resolve():
+            raise ValueError(f"init/ does not read static/{plan['static_file']}")
+        with nc.Dataset(static / plan["static_file"]) as data:
+            missing = [f for f in ("ter", "ivgtyp", "isltyp", "var2d", "con", "oa1", "ol1", "albedo12m",
+                                   "greenfrac", "soiltemp") if f not in data.variables]
+        if missing:
+            raise ValueError(f"static/{plan['static_file']} lacks {missing}")
     init_path = trial / "init" / plan["init_file"]
     with nc.Dataset(init_path) as data:
         init_id = data.getncattr("file_id")
@@ -359,18 +453,23 @@ def validate(trial):
         raise ValueError(f"Init file has {len(start_stamps)} records")
     start = time_value(start_stamps[0])
 
-    steps = files_at(trial / "steps", plan["bisection_template"])
-    expected = [timedelta(seconds=n * dt) for n in range(plan["bisection_steps"] + 1)]
-    if offsets(steps, start) != expected or len(steps) != len(expected):
-        raise ValueError(f"Bisection files {[p.name for p in steps]} do not hold steps 0..{plan['bisection_steps']}")
+    has_steps = "steps" in plan_phases(plan)
+    if not has_steps and (trial / "steps").exists():
+        raise ValueError("A case without the steps phase has a steps directory")
+    if has_steps:
+        steps = files_at(trial / "steps", plan["bisection_template"])
+        expected = [timedelta(seconds=n * dt) for n in range(plan["bisection_steps"] + 1)]
+        if offsets(steps, start) != expected or len(steps) != len(expected):
+            raise ValueError(
+                f"Bisection files {[p.name for p in steps]} do not hold steps 0..{plan['bisection_steps']}")
 
-    dump = trial / "steps" / plan["initdump_template"]
-    if not dump.is_file() or offsets([dump], start) != [timedelta(0)]:
-        raise ValueError(f"steps/{plan['initdump_template']} must hold one record at the initial time")
-    with nc.Dataset(dump) as data:
-        missing = [f for f in plan["initdump_fields"] if f not in data.variables]
-    if missing:
-        raise ValueError(f"steps/{plan['initdump_template']} lacks {missing}")
+        dump = trial / "steps" / plan["initdump_template"]
+        if not dump.is_file() or offsets([dump], start) != [timedelta(0)]:
+            raise ValueError(f"steps/{plan['initdump_template']} must hold one record at the initial time")
+        with nc.Dataset(dump) as data:
+            missing = [f for f in plan["initdump_fields"] if f not in data.variables]
+        if missing:
+            raise ValueError(f"steps/{plan['initdump_template']} lacks {missing}")
 
     forecast = trial / "forecast"
     history = files_at(forecast, plan["history_template"])
@@ -383,7 +482,7 @@ def validate(trial):
     if (len(restarts) != 1 or offsets(restarts, start) != [checkpoint]
             or time_value(marker) - start != checkpoint):
         raise ValueError(f"Expected one restart at +{checkpoint}, found {[p.name for p in restarts]}, {marker!r}")
-    if files_at(trial / "steps", plan["restart_template"]):
+    if has_steps and files_at(trial / "steps", plan["restart_template"]):
         raise ValueError("The short run wrote a restart file")
 
     # Every float written by the double-precision build is 8 bytes and finite, and every model output
@@ -405,7 +504,7 @@ def validate(trial):
                         raise ValueError(f"{phase}/{path.name} {name} is {variable.dtype}, not double")
                     if variable.size and not np.isfinite(variable[...]).all():
                         raise ValueError(f"{phase}/{path.name} {name} holds NaN or infinity")
-                if phase != "init" and data.getncattr("parent_id").split("\n", 1)[0].strip() != init_id:
+                if phase not in INIT_CORE_PHASES and data.getncattr("parent_id").split("\n", 1)[0].strip() != init_id:
                     raise ValueError(f"{phase}/{path.name} does not descend from {plan['init_file']}")
 
 

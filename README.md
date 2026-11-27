@@ -25,7 +25,10 @@ Cases: JW (Jablonowski-Williamson baroclinic wave), SC (supercell, Kessler), MW 
 idealized test-case packages, and RG: a real-data forecast on the 240-km x1.10242 mesh with the mesoscale_reference
 physics suite from one GFS analysis (inputs and changes in ci/rg/README.md), with RG24 its 24 h forecast; and RGCP
 and RGCP24: the same two runs with the convection_permitting suite (Thompson, Grell-Freitas, MYNN), whose Thompson
-tables MPAS's build_tables writes in each trial (ci/rgcp/README.md). Every run preloads CPPWRF's Intel libmvec log/log10
+tables MPAS's build_tables writes in each trial (ci/rgcp/README.md); RG60 and RG60L: RG's recipe on NCAR's 60-km
+quasi-uniform mesh x1.163842 (ci/rg60/README.md); RGVR and RGVRL: RG's recipe on NCAR's 92-25 km variable-resolution
+mesh x4.163842, whose static fields MPAS's init_atmosphere computes in each trial from WPS geographic data
+(ci/rgvr/README.md). Every run preloads CPPWRF's Intel libmvec log/log10
 (ci/mvec_intel, see ci/ref.py), because the physics' vectorised logs differ in the last bits between Intel and AMD
 CPUs; with it the references are the same on any runner.
 
@@ -41,6 +44,8 @@ Per case directory:
   executables are unchanged and the stream changes no computed value.
 - `forecast/`: a run of two package history intervals (at least 11 steps) with the package history stream
   unchanged and one restart checkpoint, written one step after the midpoint, with its `restart_timestamp`.
+- `static/` (RGVR, RGVRL only): `x4.163842.static.nc`, written by `init_atmosphere_model`'s static and GWDO stages
+  from the grid file and the geographic data sets; the trial's `init/` reads it. RG60L and RGVRL have no `steps/`.
 - `tables/` (RGCP, RGCP24 only): the four `MP_THOMPSON_*_DATA.DBL` tables that `build_tables` wrote in that trial,
   and its output (`build_tables.log`); both atmosphere runs read them.
 - `package/`: the case's namelists, streams, stream lists, tables and README as published (without the mesh,
@@ -63,7 +68,7 @@ by the wall clock: `file_id` (compared only as ten characters from `[0-9a-z]`) a
 
 ## Releases
 
-- `inputs`: the seven pinned upstream tarballs, listed with their origin in [ci/upstream.tsv](ci/upstream.tsv)
+- `inputs`: the pinned upstream tarballs and files, listed with their origin in [ci/upstream.tsv](ci/upstream.tsv)
   and checked against [ci/upstream.sha256](ci/upstream.sha256). The workflows download inputs only from here,
   because GitHub's generated source archives are not guaranteed to be byte-stable.
 - `mpas-build`: `mpas-8.4.2-<flavour>-<recipe>.tar.zst`, where `<recipe>` is the SHA-256 of the image recipe,

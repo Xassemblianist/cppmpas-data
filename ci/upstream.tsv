@@ -8,3 +8,12 @@ SC	supercell.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/test_cases/v7.0/supe
 MW	mountain_wave.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/test_cases/v7.0/mountain_wave.tar.gz
 RG	x1.10242_static.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/atmosphere_meshes/x1.10242_static.tar.gz
 RG	rg-gfs-20261012T00.wps	WPS 4.6.0 ungrib of NCEP GFS analysis 2026-10-12 00 UTC (gfs.0p25 f000), Vtable.GFS; local file FILE:2026-10-12_00
+RG60	x1.163842_static.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/atmosphere_meshes/x1.163842_static.tar.gz
+RGVR	x4.163842.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/atmosphere_meshes/x4.163842.tar.gz
+RGVR	topo_gmted2010_30s.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/topo_gmted2010_30s.tar.bz2
+RGVR	modis_landuse_20class_30s.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/modis_landuse_20class_30s.tar.bz2
+RGVR	soiltype_top_30s.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/soiltype_top_30s.tar.bz2
+RGVR	soiltemp_1deg.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/soiltemp_1deg.tar.bz2
+RGVR	greenfrac_fpar_modis.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/greenfrac_fpar_modis.tar.bz2
+RGVR	albedo_modis.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/albedo_modis.tar.bz2
+RGVR	maxsnowalb_modis.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/maxsnowalb_modis.tar.bz2
