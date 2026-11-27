@@ -44,16 +44,24 @@ CASES = {
     # grid file with WPS geographic data first, and the init reads that trial's static file.
     "RGVR": (7, "x4.163842.tar.gz", "x4.163842.grid.nc"),
     "RGVRL": (7, "x4.163842.tar.gz", "x4.163842.grid.nc"),
+    # RG120 and RG120L: RG's recipe on NCAR's 120-km quasi-uniform mesh x1.40962 (ci/rg120/README.md); RGV48 and
+    # RGV48L: on NCAR's 240-48 km variable-resolution mesh x5.30210, with the static phase of RGVR (ci/rgv48/README.md).
+    "RG120": (7, "x1.40962_static.tar.gz", "x1.40962.static.nc"),
+    "RG120L": (7, "x1.40962_static.tar.gz", "x1.40962.static.nc"),
+    "RGV48": (7, "x5.30210.tar.gz", "x5.30210.grid.nc"),
+    "RGV48L": (7, "x5.30210.tar.gz", "x5.30210.grid.nc"),
 }
-RG_CASES = ("RG", "RG24", "RGCP", "RGCP24", "RG60", "RG60L", "RGVR", "RGVRL")
+RG_CASES = ("RG", "RG24", "RGCP", "RGCP24", "RG60", "RG60L", "RGVR", "RGVRL", "RG120", "RG120L", "RGV48", "RGV48L")
 CP_CASES = ("RGCP", "RGCP24")
-STATIC_CASES = ("RGVR", "RGVRL")
+STATIC_CASES = ("RGVR", "RGVRL", "RGV48", "RGV48L")
 # Long cases: (forecast seconds, history interval seconds); one restart one step after the midpoint.
 LONG_CASES = {
     "RG24": (86400, 3 * 3600),
     "RGCP24": (86400, 3 * 3600),
     "RG60L": (6 * 3600, 3 * 3600),
     "RGVRL": (3 * 3600, 3 * 3600),
+    "RG120L": (48 * 3600, 3 * 3600),
+    "RGV48L": (24 * 3600, 3 * 3600),
 }
 # Long cases on the 163842-cell meshes run no 10-step bisection phase (their short case has it), so that the two
 # trials' forecasts fit in one runner job.
@@ -65,7 +73,9 @@ SWAP_GIB = {case: 40 for case in ("RG60", "RG60L", "RGVR", "RGVRL")}
 # Each real-data case's ci/ package directory and the graph file kept from its mesh archive.
 RG_PACKAGES = {case: ("rg", "x1.10242.graph.info") for case in ("RG", "RG24", "RGCP", "RGCP24")}
 RG_PACKAGES.update({case: ("rg60", "x1.163842.graph.info") for case in ("RG60", "RG60L")})
-RG_PACKAGES.update({case: ("rgvr", "x4.163842.graph.info") for case in STATIC_CASES})
+RG_PACKAGES.update({case: ("rgvr", "x4.163842.graph.info") for case in ("RGVR", "RGVRL")})
+RG_PACKAGES.update({case: ("rg120", "x1.40962.graph.info") for case in ("RG120", "RG120L")})
+RG_PACKAGES.update({case: ("rgv48", "x5.30210.graph.info") for case in ("RGV48", "RGV48L")})
 # The WPS geographic data sets the static stage reads (mpas_init_atm_static.F, mpas_init_atm_gwd.F, for the default
 # config_*_data options): each tarball holds one top-level directory of that name, extracted under GEOG_DIR, which
 # namelist.init_atmosphere.static names as config_geog_data_path.

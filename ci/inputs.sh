@@ -11,13 +11,15 @@ dest=${2:?download directory required}
 shift 2
 case "$mode" in
     build) roles=(build) ;;
-    cases)   # RG24, RGCP and RGCP24 use RG's inputs; RG60(L) and RGVR(L) also RG's first-guess file
+    cases)   # RG24, RGCP and RGCP24 use RG's inputs; the larger-mesh cases also RG's first-guess file
         roles=()
         for id in "$@"; do
             case "$id" in
                 RG24|RGCP|RGCP24) ids=(RG) ;;
                 RG60|RG60L) ids=(RG RG60) ;;
-                RGVR|RGVRL) ids=(RG RGVR) ;;
+                RGVR|RGVRL) ids=(RG RGVR GEOG) ;;
+                RG120|RG120L) ids=(RG RG120) ;;
+                RGV48|RGV48L) ids=(RG RGV48 GEOG) ;;
                 *) ids=("$id") ;;
             esac
             for id in "${ids[@]}"; do
@@ -41,8 +43,8 @@ while IFS=$'\t' read -r -u 3 role file _url; do
     printf '%s  %s\n' "$digest" "$dest/$file" | sha256sum -c -
     fetched+=("$role")
 done 3< "$root/ci/upstream.tsv"
-# one tarball per role, except RG (static archive and first-guess file), RGVR (grid archive and eight geographic
-# data sets) and build (four tarballs)
+# one tarball per role, except RG (static archive and first-guess file), GEOG (the eight geographic data sets)
+# and build (four tarballs)
 expected=$(awk -F'\t' -v r=" ${roles[*]} " '$1 !~ /^#/ && $1 != "" && index(r, " " $1 " ") {n++} END {print n + 0}' \
     "$root/ci/upstream.tsv")
 if (( ${#fetched[@]} != expected )); then

@@ -10,11 +10,13 @@ RG	x1.10242_static.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/atmosphere_mes
 RG	rg-gfs-20261012T00.wps	WPS 4.6.0 ungrib of NCEP GFS analysis 2026-10-12 00 UTC (gfs.0p25 f000), Vtable.GFS; local file FILE:2026-10-12_00
 RG60	x1.163842_static.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/atmosphere_meshes/x1.163842_static.tar.gz
 RGVR	x4.163842.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/atmosphere_meshes/x4.163842.tar.gz
-RGVR	topo_gmted2010_30s.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/topo_gmted2010_30s.tar.bz2
-RGVR	modis_landuse_20class_30s.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/modis_landuse_20class_30s.tar.bz2
-RGVR	soiltype_top_30s.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/soiltype_top_30s.tar.bz2
-RGVR	soiltemp_1deg.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/soiltemp_1deg.tar.bz2
-RGVR	greenfrac_fpar_modis.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/greenfrac_fpar_modis.tar.bz2
-RGVR	albedo_modis.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/albedo_modis.tar.bz2
-RGVR	maxsnowalb_modis.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/maxsnowalb_modis.tar.bz2
-RGVR	soilgrids.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/soilgrids.tar.bz2
+GEOG	topo_gmted2010_30s.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/topo_gmted2010_30s.tar.bz2
+GEOG	modis_landuse_20class_30s.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/modis_landuse_20class_30s.tar.bz2
+GEOG	soiltype_top_30s.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/soiltype_top_30s.tar.bz2
+GEOG	soiltemp_1deg.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/soiltemp_1deg.tar.bz2
+GEOG	greenfrac_fpar_modis.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/greenfrac_fpar_modis.tar.bz2
+GEOG	albedo_modis.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/albedo_modis.tar.bz2
+GEOG	maxsnowalb_modis.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/maxsnowalb_modis.tar.bz2
+GEOG	soilgrids.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/soilgrids.tar.bz2
+RG120	x1.40962_static.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/atmosphere_meshes/x1.40962_static.tar.gz
+RGV48	x5.30210.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/atmosphere_meshes/x5.30210.tar.gz
