@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Runner side of both workflows: ci/host.sh build|refs, configured by the workflow environment
-# (FLAVOUR; for refs also REF_TAG and CASE_LIST). Everything is written under .ci-work.
+# (FLAVOUR; for build optionally VERIFY=true, which rebuilds the published asset and compares it; for refs also
+# REF_TAG and CASE_LIST; for compare LEFT_TAG and RIGHT_TAG). Everything is written under .ci-work.
 set -euo pipefail
 shopt -s inherit_errexit
 cd "$(dirname "$0")/.."
 repo=$PWD
 work=$repo/.ci-work
-mode=${1:?use build or refs}
+mode=${1:?use build, refs or compare}
 flavour=${FLAVOUR:?missing FLAVOUR}
 slug=${GITHUB_REPOSITORY:?}
-[[ "$mode" == build || "$mode" == refs ]] || { echo "Unknown mode $mode" >&2; exit 2; }
+[[ "$mode" == build || "$mode" == refs || "$mode" == compare ]] || { echo "Unknown mode $mode" >&2; exit 2; }
 [[ "$flavour" == double || "$flavour" == single ]] || { echo "Unknown flavour $flavour" >&2; exit 2; }
 mkdir "$work" "$work/downloads" "$work/logs"
 
@@ -33,16 +34,73 @@ if [[ "$mode" == build ]]; then
         echo "Create the mpas-build release first (see README.md)" >&2
         exit 1
     fi
+    published=false
     if grep -Fxq "$asset" <<< "$assets"; then
-        echo "mpas-build already has $asset"
-        exit 0
+        published=true
+        if [[ "${VERIFY:-false}" != true ]]; then
+            echo "mpas-build already has $asset"
+            exit 0
+        fi
+    elif [[ "${VERIFY:-false}" == true ]]; then
+        echo "VERIFY rebuilds a published asset, and mpas-build has no $asset" >&2
+        exit 1
     fi
     bash ci/inputs.sh build "$work/downloads"
     build_image
     docker run --rm --network none --platform linux/amd64 -v "$repo:/repo:ro" -v "$work:/work" \
         "$IMAGE_ID" bash /repo/ci/build.sh "$flavour" "$asset"
     sha256sum "$work/$asset"
-    gh release upload mpas-build "$work/$asset" --repo "$slug"
+    if [[ "$published" == false ]]; then
+        gh release upload mpas-build "$work/$asset" --repo "$slug"
+        exit 0
+    fi
+    # VERIFY: a second, independent build must give the published executables, tables and licenses bit for bit.
+    mkdir "$work/published" "$work/rebuilt"
+    gh release download mpas-build --repo "$slug" --pattern "$asset" --dir "$work/published"
+    sha256sum "$work/published/$asset"
+    zstd -q -dc "$work/published/$asset" | tar -xf - -C "$work/published"
+    zstd -q -dc "$work/$asset" | tar -xf - -C "$work/rebuilt"
+    grep -E '  \./(bin|tables|licenses)/' "$work/published/build/SHA256SUMS" > "$work/published.sums"
+    grep -E '  \./(bin|tables|licenses)/' "$work/rebuilt/build/SHA256SUMS" > "$work/rebuilt.sums"
+    cat "$work/rebuilt.sums"
+    (cd "$work/published/build" && sha256sum --quiet -c SHA256SUMS)
+    if ! diff "$work/published.sums" "$work/rebuilt.sums"; then
+        echo "The rebuild differs from the published $asset" >&2
+        exit 1
+    fi
+    echo "Rebuild identical to the published $asset in bin/, tables/ and licenses/" \
+        "($(wc -l < "$work/rebuilt.sums") files)"
+    if cmp -s "$work/published/$asset" "$work/$asset"; then
+        echo "The rebuilt archive is byte-identical to the published one"
+    else
+        echo "Metadata files that differ (not part of the comparison):"
+        diff <(grep -v -E '  \./(bin|tables|licenses)/' "$work/published/build/SHA256SUMS") \
+            <(grep -v -E '  \./(bin|tables|licenses)/' "$work/rebuilt/build/SHA256SUMS") || true
+    fi
+    exit 0
+fi
+
+if [[ "$mode" == compare ]]; then
+    # Two published references, fetched and checked as README.md describes, compared file by file by ci/compare.py.
+    for side in left right; do
+        if [[ "$side" == left ]]; then tag=${LEFT_TAG:?}; else tag=${RIGHT_TAG:?}; fi
+        mkdir "$work/$side.download" "$work/$side"
+        gh release download "$tag" --repo "$slug" --dir "$work/$side.download"
+        (
+            cd "$work/$side.download"
+            sha256sum -c --ignore-missing "$tag.sha256"
+            cat "$tag".tar.zst.part* > "$tag.tar.zst"
+            rm "$tag".tar.zst.part*
+            sha256sum -c --ignore-missing "$tag.sha256"
+            zstd -q -dc "$tag.tar.zst" | tar -xf - -C "$work/$side"
+        )
+        rm -r "$work/$side.download"
+        (cd "$work/$side" && sha256sum --quiet -c SHA256SUMS)
+        df -h "$work"
+    done
+    build_image
+    docker run --rm --network none --platform linux/amd64 -v "$repo:/repo:ro" -v "$work:/work:ro" \
+        "$IMAGE_ID" python3 /repo/ci/compare.py /work/left /work/right
     exit 0
 fi
 

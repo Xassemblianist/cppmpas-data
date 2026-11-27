@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Container side of the build: ci/build.sh double|single ASSET.
 # Builds init_atmosphere_model and atmosphere_model from the verified tarballs in /work/downloads and
-# writes /work/ASSET (tar.zst of /work/build: bin, tables, licenses, metadata, SHA256SUMS).
+# writes /work/ASSET (tar.zst of /work/build: bin, tables, licenses, metadata, SHA256SUMS); bin holds
+# init_atmosphere_model, atmosphere_model and build_tables.
 set -euo pipefail
 shopt -s inherit_errexit
 flavour=${1:?precision required}
@@ -109,6 +110,17 @@ for core in init_atmosphere atmosphere; do
 done
 # The atmosphere build links the WRF physics and Noah-MP tables into the top directory.
 cp -L -- *TBL *DATA* "$out/tables/"
+# make atmosphere also builds build_tables (src/core_atmosphere/Makefile `utilities`, utils/Makefile), with the
+# same compiler and flags, and moves it to the top directory. It writes the Thompson microphysics tables
+# (MP_THOMPSON_*_DATA.DBL), which mpas-data does not ship; the convection_permitting references run it.
+test -x build_tables
+grep -Fx 'mv build_tables ../../..' /work/logs/atmosphere.build.log
+cp build_tables "$out/bin/"
+grep -E '^mpif90 .*-o build_tables ' /work/logs/atmosphere.build.log > "$metadata/build_tables.link.txt"
+ldd build_tables | sed -E 's/ \(0x[0-9a-f]+\)$//' > "$metadata/build_tables.ldd.txt"
+if grep -F 'not found' "$metadata/build_tables.ldd.txt"; then
+    exit 1
+fi
 
 cd "$out"
 find . -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SHA256SUMS

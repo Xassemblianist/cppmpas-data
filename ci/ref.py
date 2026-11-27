@@ -71,18 +71,36 @@ def launch(directory, binary):
     return round(time.monotonic() - started, 3)
 
 
+def build_tables(directory, binary):
+    """MPAS's build_tables (src/core_atmosphere/utils/build_tables.F) in directory, as a user runs it: one serial
+    process, no MPI launcher, with the run's libmvec preload and stack limit. It writes the four Thompson tables
+    there. It reports a table it cannot create on stderr and still stops with status 0
+    (atmphys_build_tables_thompson.F:43-47), so the tables and its closing message are checked here."""
+    started = time.monotonic()
+    with (directory / cases.TABLES_LOG).open("wb") as log:
+        result = subprocess.run([str(binary)], cwd=directory, stdout=log, stderr=subprocess.STDOUT,
+                                env={**os.environ, "LD_PRELOAD": str(MVEC_PRELOAD)}, preexec_fn=raise_stack_limit,
+                                check=False)
+    text = (directory / cases.TABLES_LOG).read_text(errors="replace")
+    missing = [name for name in cases.THOMPSON_TABLES if not (directory / name).is_file()]
+    if result.returncode or missing or "Finished building all tables." not in text:
+        print(f"--- {directory / cases.TABLES_LOG}", *text.splitlines()[-80:], sep="\n", file=sys.stderr)
+        raise RuntimeError(f"build_tables failed in {directory}: exit code {result.returncode}, missing {missing}")
+    return round(time.monotonic() - started, 3)
+
+
 def outputs(directory):
     return {path.name: path for path in directory.glob("*.nc") if path.is_file() and not path.is_symlink()}
 
 
-def compare_trials(first, second, receipt):
+def compare_trials(first, second, receipt, phases):
     """Write every comparison to the receipt and raise if anything differs."""
     failures = files = 0
     with receipt.open("w") as log:
         def report(line):
             print(line, file=log, flush=True)
 
-        for phase in cases.PHASES:
+        for phase in phases:
             left, right = outputs(first / phase), outputs(second / phase)
             for name in sorted(left.keys() ^ right.keys()):
                 report(f"DATA-DIFF {phase}/{name} written by one trial only")
@@ -117,7 +135,7 @@ def stage_trial(trial, target):
         if path.name != plan["mesh"]:
             shutil.copyfile(path, target / "package" / path.name)
     patches = []
-    for phase in cases.PHASES:
+    for phase in cases.plan_phases(plan):
         directory = target / phase
         directory.mkdir()
         for path in sorted((trial / phase).iterdir()):
@@ -166,7 +184,8 @@ def main():
             "make_commands": {core: (meta / f"{core}.command.txt").read_text().strip() for core in CORES},
             "make_options": {core: (meta / f"{core}.rebuild-options.txt").read_text() for core in CORES},
             "link_commands": {core: (meta / f"{core}.link.txt").read_text().strip() for core in CORES},
-            "executables_sha256": {core: sha256(build / "bin" / f"{core}_model") for core in CORES},
+            "executables_sha256": {**{core: sha256(build / "bin" / f"{core}_model") for core in CORES},
+                                   "build_tables": sha256(build / "bin" / "build_tables")},
         },
         "run": {
             "launcher": " ".join(MPIEXEC), "mpi_ranks": 1, "openmp": False, "openacc": False,
@@ -204,13 +223,18 @@ def main():
             trial_path = replicas / trial
             cases.prepare(case, downloads, build, trial_path)
             timings[trial] = {}
-            for phase in cases.PHASES:
+            phases = cases.plan_phases(json.loads((trial_path / "plan.json").read_text()))
+            for phase in phases:
+                if phase == "tables":
+                    print(f"{case}/{trial}/{phase}: build_tables", flush=True)
+                    timings[trial][phase] = build_tables(trial_path / phase, build / "bin" / "build_tables")
+                    continue
                 core = "init_atmosphere" if phase == "init" else "atmosphere"
                 print(f"{case}/{trial}/{phase} on one MPI rank", flush=True)
                 timings[trial][phase] = launch(trial_path / phase, build / "bin" / f"{core}_model")
             cases.validate(trial_path)
 
-        compare_trials(replicas / "A", replicas / "B", case_path / "determinism.txt")
+        compare_trials(replicas / "A", replicas / "B", case_path / "determinism.txt", phases)
         stage_trial(replicas / "A", case_path)
         plan = json.loads((case_path / "plan.json").read_text())
         input_asset = downloads / cases.CASES[case][1]
@@ -221,6 +245,9 @@ def main():
             "package_files_sha256": {p.name: sha256(p) for p in sorted((case_path / "package").iterdir())},
             "seconds": timings, "plan": plan,
         }
+        if plan.get("thompson_tables"):
+            receipt["cases"][case]["thompson_tables_sha256"] = {
+                name: sha256(case_path / "tables" / name) for name in plan["thompson_tables"]}
         print((case_path / "determinism.txt").read_text().rstrip(), flush=True)
         shutil.rmtree(replicas)
 

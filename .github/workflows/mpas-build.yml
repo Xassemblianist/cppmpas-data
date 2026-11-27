@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Builds MPAS-Atmosphere 8.4.2 in the pinned Debian 13 image and uploads it to the mpas-build release,
-# unless an asset with the same recipe hash is already there.
+# unless an asset with the same recipe hash is already there. With verify, it builds that asset again and
+# compares the two.
 name: mpas-build
-run-name: MPAS 8.4.2 build / ${{ inputs.flavour }}
+run-name: MPAS 8.4.2 build / ${{ inputs.flavour }}${{ inputs.verify && ' / verify' || '' }}
 on:
   workflow_dispatch:
     inputs:
@@ -11,10 +12,14 @@ on:
         type: choice
         options: [double, single]
         default: double
+      verify:
+        description: Rebuild the published asset of this recipe and require identical executables and tables
+        type: boolean
+        default: false
 permissions:
   contents: write
 concurrency:
-  group: mpas-build-${{ inputs.flavour }}
+  group: mpas-build-${{ inputs.flavour }}-${{ inputs.verify }}
   cancel-in-progress: false
 jobs:
   build:
@@ -23,6 +28,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       FLAVOUR: ${{ inputs.flavour }}
+      VERIFY: ${{ inputs.verify }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -31,7 +37,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: mpas-build-logs-${{ inputs.flavour }}
+          name: mpas-build-logs-${{ inputs.flavour }}${{ inputs.verify && '-verify' || '' }}
           path: .ci-work/logs/
           include-hidden-files: true
           if-no-files-found: ignore

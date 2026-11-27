@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Prepare one trial of an NCAR idealized case and validate the files that trial wrote.
+"""Prepare one trial of a reference case and validate the files that trial wrote.
 
 A trial has three run directories: init (init_atmosphere_model), steps (atmosphere_model for ten
 timesteps, writing the bisection stream after every step) and forecast (atmosphere_model for two
-package history intervals, writing the package history and one restart checkpoint). Only
-config_run_duration and the stream intervals are changed; everything else is the NCAR package.
+package history intervals, writing the package history and one restart checkpoint). The
+convection_permitting cases have a fourth, tables, run first: MPAS's build_tables writes the Thompson
+microphysics tables there, and both atmosphere runs read them. Only config_run_duration and the stream
+intervals are changed; everything else is the case package.
 """
 import argparse
 from datetime import datetime, timedelta
@@ -29,9 +31,23 @@ CASES = {
     # RG24: the same case and inputs, with a 24 h forecast (history every RG24_HISTORY_SECONDS, one restart one step
     # after 12 h). RG's own forecast is two history intervals (2 h).
     "RG24": (7, "x1.10242_static.tar.gz", "x1.10242.static.nc"),
+    # RGCP and RGCP24: RG and RG24 with config_physics_suite = 'convection_permitting' (ci/rgcp/README.md). A
+    # fourth phase, tables, runs MPAS's build_tables before the init, and both model runs read its Thompson tables.
+    "RGCP": (7, "x1.10242_static.tar.gz", "x1.10242.static.nc"),
+    "RGCP24": (7, "x1.10242_static.tar.gz", "x1.10242.static.nc"),
 }
+RG_CASES = ("RG", "RG24", "RGCP", "RGCP24")
+CP_CASES = ("RGCP", "RGCP24")
+DAY_CASES = ("RG24", "RGCP24")
 RG24_FORECAST_SECONDS = 86400
 RG24_HISTORY_SECONDS = 3 * 3600
+# The namelist.atmosphere options the convection_permitting cases change in RG's package.
+CP_NAMELIST = {"config_physics_suite": "'convection_permitting'"}
+# The look-up tables that thompson_init reads with status='OLD' (module_mp_thompson.F:862-965) and build_tables
+# writes in its working directory (src/core_atmosphere/utils/atmphys_build_tables_thompson.F:40-110).
+THOMPSON_TABLES = ("MP_THOMPSON_QRacrQG_DATA.DBL", "MP_THOMPSON_QRacrQS_DATA.DBL",
+                   "MP_THOMPSON_freezeH2O_DATA.DBL", "MP_THOMPSON_QIautQS_DATA.DBL")
+TABLES_LOG = "build_tables.log"
 # RG's first-guess file: the release-safe name in `inputs`, and the name init_atmosphere reads (config_met_prefix
 # 'FILE' and config_start_time).
 RG_MET = ("rg-gfs-20261012T00.wps", "FILE:2026-10-12_00")
@@ -65,6 +81,12 @@ INITDUMP_FIELDS = (
     "uReconstructX", "uReconstructY", "uReconstructZ", "uReconstructZonal", "uReconstructMeridional",
 )
 PHASES = ("init", "steps", "forecast")
+CP_PHASES = ("tables",) + PHASES
+
+
+def plan_phases(plan):
+    """The run directories of a trial in run order (plans without "phases" have the three of PHASES)."""
+    return tuple(plan.get("phases", PHASES))
 PACKAGE_PREFIXES = ("namelist.", "streams.", "stream_list.")
 
 
@@ -117,9 +139,9 @@ def flat_name(path):
     return path
 
 
-def stage_rg(downloads, package):
+def stage_rg(case, downloads, package):
     """RG: the static file and its graph partition file from NCAR's archive, the met file, and ci/rg's inputs."""
-    _, archive, mesh = CASES["RG"]  # RG24 uses RG's inputs
+    _, archive, mesh = CASES["RG"]  # RG24, RGCP and RGCP24 use RG's inputs
     with tarfile.open(downloads / archive, "r:gz") as source:
         for member in source.getmembers():
             name = Path(member.name).name
@@ -132,12 +154,18 @@ def stage_rg(downloads, package):
     for item in sorted(RG_PACKAGE.iterdir()):
         if item.name.startswith(PACKAGE_PREFIXES):
             shutil.copyfile(item, package / item.name)
+    if case in CP_CASES:
+        path = package / "namelist.atmosphere"
+        text = path.read_text()
+        for key, value in CP_NAMELIST.items():
+            text = set_nml(text, key, value)
+        path.write_text(text)
 
 
 def stage_package(case, downloads, package):
     """Copy the case configuration, tables and mesh from the top directory of the package."""
-    if case in ("RG", "RG24"):
-        stage_rg(downloads, package)
+    if case in RG_CASES:
+        stage_rg(case, downloads, package)
         return
     _, archive, mesh = CASES[case]
     with tarfile.open(downloads / archive, "r:gz") as source:
@@ -172,7 +200,7 @@ def prepare(case, downloads, build, trial):
         raise ValueError(f"{case} package does not select init case {init_case}")
     for name in ("namelist.init_atmosphere", "streams.init_atmosphere"):
         shutil.copyfile(package / name, init / name)
-    if case in ("RG", "RG24"):
+    if case in RG_CASES:
         (init / RG_MET[1]).symlink_to(Path("..") / "package" / RG_MET[1])
         if nml_value(init_text, "config_met_prefix") + ":" + nml_value(init_text, "config_start_time")[:13] \
                 != RG_MET[1]:
@@ -185,6 +213,9 @@ def prepare(case, downloads, build, trial):
     atm_text = (package / "namelist.atmosphere").read_text()
     if case == "SC" and nml_value(atm_text, "config_microp_scheme") != "mp_kessler":
         raise ValueError("SC requires the package's Kessler microphysics")
+    suite = nml_value(atm_text, "config_physics_suite") if case in RG_CASES else None
+    if suite is not None and suite != ("convection_permitting" if case in CP_CASES else "mesoscale_reference"):
+        raise ValueError(f"{case} namelist selects the physics suite {suite!r}")
     if assignment(atm_text, "config_stop_time") or assignment(atm_text, "config_do_restart") is None \
             or nml_value(atm_text, "config_do_restart").lower().strip(".") not in {"false", "f"}:
         raise ValueError(f"{case} namelist must be a cold start that ends by config_run_duration")
@@ -210,7 +241,7 @@ def prepare(case, downloads, build, trial):
         raise ValueError(f"{case} restart template {restart_template!r} must be timestamped and distinct")
     # Two history intervals; one checkpoint, one step after the midpoint, so it is not at a history time.
     forecast_seconds = max(2 * history_seconds, (STEPS + 1) * dt)
-    if case == "RG24":
+    if case in DAY_CASES:
         history_seconds, forecast_seconds = RG24_HISTORY_SECONDS, RG24_FORECAST_SECONDS
     restart_seconds = (forecast_seconds // (2 * dt) + 1) * dt
     plan = {
@@ -223,6 +254,9 @@ def prepare(case, downloads, build, trial):
         "restart_template": restart_template, "restart_seconds": restart_seconds,
         "restart_timestamp_file": timestamp_file,
     }
+    if case in CP_CASES:
+        plan.update(phases=list(CP_PHASES), thompson_tables=list(THOMPSON_TABLES))
+        (trial / "tables").mkdir()
 
     for phase, seconds in (("steps", STEPS * dt), ("forecast", forecast_seconds)):
         run = trial / phase
@@ -230,6 +264,9 @@ def prepare(case, downloads, build, trial):
         (run / init_file).symlink_to(Path("..") / "init" / init_file)
         for table in sorted((build / "tables").iterdir()):
             (run / table.name).symlink_to(table.resolve())
+        for name in plan.get("thompson_tables", []):
+            # build_tables writes them in this trial's tables/ before the model runs.
+            (run / name).symlink_to(Path("..") / "tables" / name)
         for item in sorted(package.iterdir()):
             if item.name.endswith(".TBL") or item.name.startswith("stream_list.atmosphere."):
                 (run / item.name).unlink(missing_ok=True)
@@ -243,7 +280,7 @@ def prepare(case, downloads, build, trial):
         restart = stream(root, "restart")
         if phase == "forecast":
             restart.set("output_interval", duration(restart_seconds))
-            if case == "RG24":
+            if case in DAY_CASES:
                 stream(root, "output").set("output_interval", duration(history_seconds))
         else:
             restart.set("output_interval", "none")
@@ -303,6 +340,17 @@ def validate(trial):
 
     plan = json.loads((trial / "plan.json").read_text())
     dt = plan["dt_seconds"]
+    if plan.get("thompson_tables"):
+        tables = trial / "tables"
+        written = sorted(path.name for path in tables.iterdir())
+        if written != sorted(plan["thompson_tables"] + [TABLES_LOG]):
+            raise ValueError(f"tables/ holds {written}, expected the Thompson tables and {TABLES_LOG}")
+        for name in plan["thompson_tables"]:
+            if (tables / name).is_symlink() or not (tables / name).stat().st_size:
+                raise ValueError(f"tables/{name} is empty or a link")
+            for phase in ("steps", "forecast"):
+                if (trial / phase / name).resolve() != (tables / name).resolve():
+                    raise ValueError(f"{phase}/{name} does not read tables/{name}")
     init_path = trial / "init" / plan["init_file"]
     with nc.Dataset(init_path) as data:
         init_id = data.getncattr("file_id")
@@ -342,7 +390,7 @@ def validate(trial):
     # names the trial's own initial file as its parent.
     import numpy as np
 
-    for phase in PHASES:
+    for phase in plan_phases(plan):
         if any(path.is_dir() for path in (trial / phase).iterdir()):
             raise ValueError(f"{phase} holds a subdirectory; outputs must be flat")
         for path in sorted((trial / phase).glob("*.nc")):

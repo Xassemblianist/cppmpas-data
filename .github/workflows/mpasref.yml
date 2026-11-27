@@ -16,7 +16,7 @@ on:
         options: [double]
         default: double
       cases:
-        description: Space- or comma-separated IDs from JW, SC, MW, RG, RG24
+        description: Space- or comma-separated IDs from JW, SC, MW, RG, RG24, RGCP, RGCP24
         type: string
         default: JW
 permissions:
@@ -53,6 +53,7 @@ jobs:
             .ci-work/trials/*/*/*/mpiexec.log
             .ci-work/trials/*/*/*/namelist.*
             .ci-work/trials/*/*/*/streams.*
+            .ci-work/trials/*/*/tables/build_tables.log
             .ci-work/reference/*/determinism.txt
           include-hidden-files: true
           if-no-files-found: ignore

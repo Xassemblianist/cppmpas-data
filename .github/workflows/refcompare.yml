@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Downloads two published references, checks their hashes, and requires every case file to be the same
+# (ci/compare.py): for example the same case made on an Intel and on an AMD runner.
+name: refcompare
+run-name: ${{ inputs.left }} vs ${{ inputs.right }}
+on:
+  workflow_dispatch:
+    inputs:
+      left:
+        description: Reference release tag
+        type: string
+        required: true
+      right:
+        description: Reference release tag
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      FLAVOUR: double
+      LEFT_TAG: ${{ inputs.left }}
+      RIGHT_TAG: ${{ inputs.right }}
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache
+          df -h /
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: bash ci/host.sh compare
