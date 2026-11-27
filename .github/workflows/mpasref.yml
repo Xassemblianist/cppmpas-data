@@ -16,7 +16,7 @@ on:
         options: [double]
         default: double
       cases:
-        description: Space- or comma-separated IDs from JW, SC, MW, RG
+        description: Space- or comma-separated IDs from JW, SC, MW, RG, RG24
         type: string
         default: JW
 permissions:

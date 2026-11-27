@@ -26,7 +26,12 @@ CASES = {
     # GFS analysis as a WPS intermediate file; the namelists and streams are MPAS v8.4.2's generated defaults with
     # the changes in ci/rg/README.md.
     "RG": (7, "x1.10242_static.tar.gz", "x1.10242.static.nc"),
+    # RG24: the same case and inputs, with a 24 h forecast (history every RG24_HISTORY_SECONDS, one restart one step
+    # after 12 h). RG's own forecast is two history intervals (2 h).
+    "RG24": (7, "x1.10242_static.tar.gz", "x1.10242.static.nc"),
 }
+RG24_FORECAST_SECONDS = 86400
+RG24_HISTORY_SECONDS = 3 * 3600
 # RG's first-guess file: the release-safe name in `inputs`, and the name init_atmosphere reads (config_met_prefix
 # 'FILE' and config_start_time).
 RG_MET = ("rg-gfs-20261012T00.wps", "FILE:2026-10-12_00")
@@ -114,7 +119,7 @@ def flat_name(path):
 
 def stage_rg(downloads, package):
     """RG: the static file and its graph partition file from NCAR's archive, the met file, and ci/rg's inputs."""
-    _, archive, mesh = CASES["RG"]
+    _, archive, mesh = CASES["RG"]  # RG24 uses RG's inputs
     with tarfile.open(downloads / archive, "r:gz") as source:
         for member in source.getmembers():
             name = Path(member.name).name
@@ -131,7 +136,7 @@ def stage_rg(downloads, package):
 
 def stage_package(case, downloads, package):
     """Copy the case configuration, tables and mesh from the top directory of the package."""
-    if case == "RG":
+    if case in ("RG", "RG24"):
         stage_rg(downloads, package)
         return
     _, archive, mesh = CASES[case]
@@ -167,7 +172,7 @@ def prepare(case, downloads, build, trial):
         raise ValueError(f"{case} package does not select init case {init_case}")
     for name in ("namelist.init_atmosphere", "streams.init_atmosphere"):
         shutil.copyfile(package / name, init / name)
-    if case == "RG":
+    if case in ("RG", "RG24"):
         (init / RG_MET[1]).symlink_to(Path("..") / "package" / RG_MET[1])
         if nml_value(init_text, "config_met_prefix") + ":" + nml_value(init_text, "config_start_time")[:13] \
                 != RG_MET[1]:
@@ -205,6 +210,8 @@ def prepare(case, downloads, build, trial):
         raise ValueError(f"{case} restart template {restart_template!r} must be timestamped and distinct")
     # Two history intervals; one checkpoint, one step after the midpoint, so it is not at a history time.
     forecast_seconds = max(2 * history_seconds, (STEPS + 1) * dt)
+    if case == "RG24":
+        history_seconds, forecast_seconds = RG24_HISTORY_SECONDS, RG24_FORECAST_SECONDS
     restart_seconds = (forecast_seconds // (2 * dt) + 1) * dt
     plan = {
         "case": case, "init_case": init_case, "mesh": mesh, "init_file": init_file, "dt_seconds": dt,
@@ -236,6 +243,8 @@ def prepare(case, downloads, build, trial):
         restart = stream(root, "restart")
         if phase == "forecast":
             restart.set("output_interval", duration(restart_seconds))
+            if case == "RG24":
+                stream(root, "output").set("output_interval", duration(history_seconds))
         else:
             restart.set("output_interval", "none")
             # The forecast writes the package history; the short run writes only the bisection stream.

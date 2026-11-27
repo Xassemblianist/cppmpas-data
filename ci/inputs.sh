@@ -11,7 +11,7 @@ dest=${2:?download directory required}
 shift 2
 case "$mode" in
     build) roles=(build) ;;
-    cases) roles=("$@") ;;
+    cases) roles=("${@/#RG24/RG}") ;;   # RG24 uses RG's inputs
     *) echo "Unknown mode $mode" >&2; exit 2 ;;
 esac
 (( ${#roles[@]} > 0 )) || { echo "No case IDs given" >&2; exit 2; }
