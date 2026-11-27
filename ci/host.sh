@@ -184,7 +184,13 @@ build_image
 BASE_IMAGE=$(awk '/^FROM / {print $2}' ci/Dockerfile)
 DOCKER_SERVER=$(docker version --format '{{.Server.Version}}')
 export REF_TAG=$tag BUILD_ASSET=$asset BUILD_SHA256 RECIPE_SHA256=$recipe IMAGE_ID BASE_IMAGE DOCKER_SERVER
-docker run --rm --platform linux/amd64 --shm-size 1g -v "$repo:/repo:ro" -v "$work:/work" \
+# With a swap file, the container's memory is capped below the runner's, so that the model's pages, not the runner
+# agent's, go to swap (an uncapped run starved the runner, which lost contact with GitHub: run 46070002759).
+memory_cap=()
+if (( swap_gib > 0 )); then
+    memory_cap=(--memory "$(( $(awk '/^MemTotal:/ {print $2}' /proc/meminfo) - 3 * 1024 * 1024 ))k" --memory-swap -1)
+fi
+docker run --rm --platform linux/amd64 --shm-size 1g "${memory_cap[@]}" -v "$repo:/repo:ro" -v "$work:/work" \
     -e CASE_LIST -e REF_TAG -e BUILD_ASSET -e BUILD_SHA256 -e RECIPE_SHA256 -e BASE_IMAGE -e IMAGE_ID \
     -e DOCKER_SERVER -e RUNNER_ENVIRONMENT -e RUNNER_OS -e RUNNER_ARCH -e ImageOS -e ImageVersion \
     -e GITHUB_REPOSITORY -e GITHUB_SHA -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT \
