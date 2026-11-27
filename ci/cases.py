@@ -70,6 +70,9 @@ NO_STEPS_CASES = ("RG60L", "RGVRL")
 # attempt, run 46066643405: killed at 15.25 GB resident, before the first step), so ci/host.sh adds a swap file of this
 # many GiB on the runner disk for these cases. Swap changes where pages live, not a computed value.
 SWAP_GIB = {case: 40 for case in ("RG60", "RG60L", "RGVR", "RGVRL")}
+# The GWDO stage holds the global 30-arc-second terrain and land use in memory: the static phase on x5.30210 reached
+# 14195472 KiB resident (run 46076927558) on a 16 GB runner, so RGV48 gets swap too.
+SWAP_GIB.update({case: 16 for case in ("RGV48", "RGV48L")})
 # Each real-data case's ci/ package directory and the graph file kept from its mesh archive.
 RG_PACKAGES = {case: ("rg", "x1.10242.graph.info") for case in ("RG", "RG24", "RGCP", "RGCP24")}
 RG_PACKAGES.update({case: ("rg60", "x1.163842.graph.info") for case in ("RG60", "RG60L")})
