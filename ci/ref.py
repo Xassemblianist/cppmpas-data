@@ -75,7 +75,7 @@ def build_tables(directory, binary):
     """MPAS's build_tables (src/core_atmosphere/utils/build_tables.F) in directory, as a user runs it: one serial
     process, no MPI launcher, with the run's libmvec preload and stack limit. It writes the four Thompson tables
     there. It reports a table it cannot create on stderr and still stops with status 0
-    (atmphys_build_tables_thompson.F:43-47), so the tables and its closing message are checked here."""
+    (atmphys_build_tables_thompson.F:45-49), so the tables and its closing message are checked here."""
     started = time.monotonic()
     with (directory / cases.TABLES_LOG).open("wb") as log:
         result = subprocess.run([str(binary)], cwd=directory, stdout=log, stderr=subprocess.STDOUT,
