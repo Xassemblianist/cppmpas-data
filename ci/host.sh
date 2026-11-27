@@ -143,6 +143,13 @@ if missing:
     sys.exit(f"The runner CPU lacks {sorted(missing)}, so glibc would select other libm variants")
 PY
 
+# REQUIRE_CPU_VENDOR (e.g. AuthenticAMD): stop before any work on a runner of another vendor, so that a case can
+# be made on both vendors and compared.
+vendor=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["vendor_id"])' "$work/cpu.json")
+if [[ -n "${REQUIRE_CPU_VENDOR:-}" && "$vendor" != "$REQUIRE_CPU_VENDOR" ]]; then
+    echo "The runner CPU vendor is $vendor, not $REQUIRE_CPU_VENDOR; nothing was run" >&2
+    exit 3
+fi
 bash ci/inputs.sh cases "$work/downloads" "${case_ids[@]}"
 gh release download mpas-build --repo "$slug" --pattern "$asset" --dir "$work"
 BUILD_SHA256=$(sha256sum "$work/$asset" | cut -d' ' -f1)

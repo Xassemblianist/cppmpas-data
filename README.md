@@ -23,7 +23,9 @@ run), and the reference is published only when the two trials match.
 
 Cases: JW (Jablonowski-Williamson baroclinic wave), SC (supercell, Kessler), MW (mountain wave) from NCAR's
 idealized test-case packages, and RG: a real-data forecast on the 240-km x1.10242 mesh with the mesoscale_reference
-physics suite from one GFS analysis (inputs and changes in ci/rg/README.md). Every run preloads CPPWRF's Intel libmvec log/log10
+physics suite from one GFS analysis (inputs and changes in ci/rg/README.md), with RG24 its 24 h forecast; and RGCP
+and RGCP24: the same two runs with the convection_permitting suite (Thompson, Grell-Freitas, MYNN), whose Thompson
+tables MPAS's build_tables writes in each trial (ci/rgcp/README.md). Every run preloads CPPWRF's Intel libmvec log/log10
 (ci/mvec_intel, see ci/ref.py), because the physics' vectorised logs differ in the last bits between Intel and AMD
 CPUs; with it the references are the same on any runner.
 
@@ -39,6 +41,8 @@ Per case directory:
   executables are unchanged and the stream changes no computed value.
 - `forecast/`: a run of two package history intervals (at least 11 steps) with the package history stream
   unchanged and one restart checkpoint, written one step after the midpoint, with its `restart_timestamp`.
+- `tables/` (RGCP, RGCP24 only): the four `MP_THOMPSON_*_DATA.DBL` tables that `build_tables` wrote in that trial,
+  and its output (`build_tables.log`); both atmosphere runs read them.
 - `package/`: the case's namelists, streams, stream lists, tables and README as published (without the mesh,
   whose SHA-256 is in `provenance.json`); `configuration.diff` shows every edit made for the runs.
 - `plan.json`: timestep, history interval, run lengths and restart time; `determinism.txt`: the comparison.
@@ -68,6 +72,12 @@ by the wall clock: `file_id` (compared only as ten characters from `[0-9a-z]`) a
 - one release per reference tag: `<tag>.tar.zst.part00`, `.part01`, … (release assets must be under 2 GiB) and
   `<tag>.sha256` with the hashes of every part and of the joined archive.
 
+Build assets from commit 8739add on also hold `bin/build_tables` (built by `make atmosphere` with the same compiler
+and flags). `mpas-build` with `verify=true` builds the published asset of the current recipe a second time and
+fails unless `bin/`, `tables/` and `licenses/` are bit-identical; `refcompare` fetches two reference releases,
+checks their hashes and compares every case file (NetCDF as above, every other file byte for byte, MPAS's own
+logs excepted), printing each side's runner CPU.
+
 ## Dispatch
 
 `mpas-build` must exist as a release before the first build. Dispatch the references from the same commit
@@ -77,6 +87,8 @@ as the build so that the recipe hash matches; one case per tag.
 repo=Xassemblianist/cppmpas-data
 gh workflow run mpas-build.yml -R "$repo" --ref main -f flavour=double
 gh workflow run mpasref.yml -R "$repo" --ref main -f tag=mpas842-dbl-jw-001 -f flavour=double -f cases=JW
+gh workflow run mpas-build.yml -R "$repo" --ref main -f flavour=double -f verify=true
+gh workflow run refcompare.yml -R "$repo" --ref main -f left=mpas842-dbl-rgcp-001 -f right=mpas842-dbl-rgcp-002
 ```
 
 ## Fetch a reference

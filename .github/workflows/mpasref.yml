@@ -19,6 +19,10 @@ on:
         description: Space- or comma-separated IDs from JW, SC, MW, RG, RG24, RGCP, RGCP24
         type: string
         default: JW
+      cpu_vendor:
+        description: Run only on this CPU vendor (GenuineIntel or AuthenticAMD); empty for any
+        type: string
+        default: ''
 permissions:
   contents: write
 concurrency:
@@ -33,6 +37,7 @@ jobs:
       REF_TAG: ${{ inputs.tag }}
       FLAVOUR: ${{ inputs.flavour }}
       CASE_LIST: ${{ inputs.cases }}
+      REQUIRE_CPU_VENDOR: ${{ inputs.cpu_vendor }}
     steps:
       - name: Free disk space
         run: |
