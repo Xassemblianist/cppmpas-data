@@ -70,7 +70,7 @@ RG_PACKAGES.update({case: ("rgvr", "x4.163842.graph.info") for case in STATIC_CA
 # config_*_data options): each tarball holds one top-level directory of that name, extracted under GEOG_DIR, which
 # namelist.init_atmosphere.static names as config_geog_data_path.
 GEOG_DATASETS = ("topo_gmted2010_30s", "modis_landuse_20class_30s", "soiltype_top_30s", "soiltemp_1deg",
-                 "greenfrac_fpar_modis", "albedo_modis", "maxsnowalb_modis")
+                 "greenfrac_fpar_modis", "albedo_modis", "maxsnowalb_modis", "soilgrids")
 GEOG_DIR = Path("/work/geog")
 STATIC_SUFFIX = ".static"  # namelist.init_atmosphere.static and streams.init_atmosphere.static
 # The namelist.atmosphere options the convection_permitting cases change in RG's package.
@@ -446,7 +446,7 @@ def validate(trial):
             raise ValueError(f"init/ does not read static/{plan['static_file']}")
         with nc.Dataset(static / plan["static_file"]) as data:
             missing = [f for f in ("ter", "ivgtyp", "isltyp", "var2d", "con", "oa1", "ol1", "albedo12m",
-                                   "greenfrac", "soiltemp") if f not in data.variables]
+                                   "greenfrac", "soiltemp", "soilcomp", "soilcl1") if f not in data.variables]
         if missing:
             raise ValueError(f"static/{plan['static_file']} lacks {missing}")
     init_path = trial / "init" / plan["init_file"]

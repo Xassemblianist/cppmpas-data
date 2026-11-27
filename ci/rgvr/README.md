@@ -38,6 +38,7 @@ The static stage reads the WPS geographic data sets that MPAS 8.4.2 uses for the
 | `greenfrac_fpar_modis` | vegetation fraction (`MODIS`) |
 | `albedo_modis` | monthly albedo (`MODIS`) |
 | `maxsnowalb_modis` | maximum snow albedo (`MODIS`) |
+| `soilgrids` | `soilcomp` and the soil texture layers `soilcl1`-`soilcl4`, read because `config_noahmp_static` is true by default (`mpas_init_atm_static.F:1199`); NCAR's static files hold them too |
 
 `ci/cases.py` extracts them once per run under `/work/geog/` (each tarball must hold one directory of its name);
 the receipt lists their SHA-256 (`cases.<ID>.geog_sha256`).
