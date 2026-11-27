@@ -80,6 +80,19 @@ disassembly):
 
 Of glibc 2.41's SSE4 variants of these, only `log` and `log10` take `rcpps` (`rsqrtps` none); `exp`, `pow`, `atan`,
 `sin` and `cos` use no instruction whose result the hardware defines. `log` and `log10` are already the Intel ones
-on every runner (`ci/mvec_intel`), so the preload is not extended. Whether an Intel and an AMD runner give the same
-references is checked by running the case on both and comparing them with the `refcompare` workflow; the result
-is in the top-level README.
+on every runner (`ci/mvec_intel`), so the preload is not extended. `build_tables` imports only `_ZGVbN2v_exp`,
+`_ZGVbN2v_log`, `_ZGVbN2v_log10` and `_ZGVbN2vv_pow`; in the Thompson table routines it calls exp (`thompson_init`,
+`qr_acr_qg`, `qr_acr_qs`) and pow (`qr_acr_qg`, `qr_acr_qs`, `freezeh2o`, `table_dropevap`).
+
+The check: the same case on an Intel and an AMD runner, compared by the `refcompare` workflow (every NetCDF file at
+the byte level, the tables and every other file byte for byte). mpas842-dbl-rgcp-001 (Intel Xeon 6975P-C) and
+mpas842-dbl-rgcp-004 (AMD EPYC 9V74) are identical (refcompare run 46022359710, 99 files, 18 NetCDF); the
+RGCP24 pair is listed in the top-level README.
+
+## Making a release
+
+The first two RGCP24 runs (46016237120, 46016241433, commit 4ae1504) made identical trials but failed at
+`gh release create` with HTTP 403 ("Resource not accessible by integration"); ff06a63, which changed
+`.github/workflows/mpasref.yml`, had been pushed to main while they ran. Runs made from main's head succeeded. The
+likely cause: the workflow token has no `workflows` permission, and a new tag at a commit whose workflow files
+differ from main's counts as a workflow change. Push no workflow change while a reference run is in progress.

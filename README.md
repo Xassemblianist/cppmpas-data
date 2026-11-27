@@ -78,6 +78,26 @@ fails unless `bin/`, `tables/` and `licenses/` are bit-identical; `refcompare` f
 checks their hashes and compares every case file (NetCDF as above, every other file byte for byte, MPAS's own
 logs excepted), printing each side's runner CPU.
 
+## convection_permitting references
+
+| Tag | Case | Run | Runner CPU | Size | Archive SHA-256 |
+| --- | --- | --- | --- | --- | --- |
+| `mpas842-dbl-rgcp-001` | RGCP | 46013527381 | Intel Xeon 6975P-C | 1873269384 B (1 part) | `3abb3d828df91f7e631a68279a3b0052d0254c1413afb0a4e4faa9e73275afbb` |
+| `mpas842-dbl-rgcp24-001` | RGCP24 | 46032373796 | Intel Xeon 6975P-C | 2482191079 B (2 parts) | `e82ed02ee318c231f99a75d2d5e2dad26f6680d7a895893ffba4c3c1a9633e99` |
+
+Both come from build asset `mpas-8.4.2-double-7be24aab….tar.zst` (SHA-256 `40313ccf…66c4`), whose
+`atmosphere_model` and `init_atmosphere_model` are bit-identical to those of the earlier asset that made the RG
+references; a second build (mpas-build verify, run 46013523007) gave a byte-identical archive. Each run's two
+trials were identical, tables included. Cross-checks, compared with `refcompare` (0 differences in every case file):
+
+- rgcp-001 = rgcp-002 (Intel, run 46018881505); rgcp-003 (Intel) also passed its own two-trial check;
+- rgcp-001 = rgcp-004 (AMD EPYC 9V74, run 46022359710);
+- rgcp24-001 = rgcp24-003 (AMD EPYC 7763, run 46040434563).
+
+So with the Intel log/log10 preload, Intel and AMD runners give the same convection_permitting references; no other
+libmvec function needed replacing (ci/rgcp/README.md). The Thompson tables are also attached to
+`mpas842-dbl-rgcp-001` as separate assets with `mpas842-dbl-rgcp-001.tables.sha256`.
+
 ## Dispatch
 
 `mpas-build` must exist as a release before the first build. Dispatch the references from the same commit
