@@ -80,7 +80,7 @@ RG_PACKAGES.update({case: ("rgv48", "x5.30210.graph.info") for case in ("RGV48",
 # config_*_data options): each tarball holds one top-level directory of that name, extracted under GEOG_DIR, which
 # namelist.init_atmosphere.static names as config_geog_data_path.
 GEOG_DATASETS = ("topo_gmted2010_30s", "modis_landuse_20class_30s", "soiltype_top_30s", "soiltemp_1deg",
-                 "greenfrac_fpar_modis", "albedo_modis", "maxsnowalb_modis", "soilgrids")
+                 "greenfrac_fpar_modis", "albedo_modis", "maxsnowalb_modis", "soilgrids", "landuse_30s")
 GEOG_DIR = Path("/work/geog")
 STATIC_SUFFIX = ".static"  # namelist.init_atmosphere.static and streams.init_atmosphere.static
 # The namelist.atmosphere options the convection_permitting cases change in RG's package.

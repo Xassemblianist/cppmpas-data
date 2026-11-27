@@ -43,7 +43,7 @@ while IFS=$'\t' read -r -u 3 role file _url; do
     printf '%s  %s\n' "$digest" "$dest/$file" | sha256sum -c -
     fetched+=("$role")
 done 3< "$root/ci/upstream.tsv"
-# one tarball per role, except RG (static archive and first-guess file), GEOG (the eight geographic data sets)
+# one tarball per role, except RG (static archive and first-guess file), GEOG (the nine geographic data sets)
 # and build (four tarballs)
 expected=$(awk -F'\t' -v r=" ${roles[*]} " '$1 !~ /^#/ && $1 != "" && index(r, " " $1 " ") {n++} END {print n + 0}' \
     "$root/ci/upstream.tsv")

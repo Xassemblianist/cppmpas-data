@@ -20,3 +20,4 @@ GEOG	maxsnowalb_modis.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/maxsno
 GEOG	soilgrids.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/soilgrids.tar.bz2
 RG120	x1.40962_static.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/atmosphere_meshes/x1.40962_static.tar.gz
 RGV48	x5.30210.tar.gz	https://www2.mmm.ucar.edu/projects/mpas/atmosphere_meshes/x5.30210.tar.gz
+GEOG	landuse_30s.tar.bz2	https://www2.mmm.ucar.edu/wrf/src/wps_files/landuse_30s.tar.bz2
