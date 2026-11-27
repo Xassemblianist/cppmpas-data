@@ -7,8 +7,9 @@ variable-resolution exercise, with the same GFS first-guess file (2026-10-12 00 
 
 - RGV48, like RG: steps 0-10 with the bisection and initdump streams, then a 2 h forecast with hourly history and
   one restart one step after 1 h.
-- RGV48L: a 24 h forecast (`ci/cases.py` `LONG_CASES`), history and diag every 3 h, one restart one step after 12 h,
-  plus the steps phase as RG24 has.
+- RGV48L: a 12 h forecast (`ci/cases.py` `LONG_CASES`), history and diag every 3 h, one restart one step after 6 h,
+  and no steps phase (`NO_STEPS_CASES`; RGV48 has it): with two static phases of about 40 minutes each, a 24 h
+  forecast (360 steps of 240 s, about 25 s each) twice does not fit in the 6-hour job.
 
 ## Why this mesh
 

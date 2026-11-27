@@ -61,11 +61,11 @@ LONG_CASES = {
     "RG60L": (6 * 3600, 3 * 3600),
     "RGVRL": (3 * 3600, 3 * 3600),
     "RG120L": (48 * 3600, 3 * 3600),
-    "RGV48L": (24 * 3600, 3 * 3600),
+    "RGV48L": (12 * 3600, 3 * 3600),
 }
 # Long cases on the 163842-cell meshes run no 10-step bisection phase (their short case has it), so that the two
 # trials' forecasts fit in one runner job.
-NO_STEPS_CASES = ("RG60L", "RGVRL")
+NO_STEPS_CASES = ("RG60L", "RGVRL", "RGV48L")
 # One-rank atmosphere_model on a 163842-cell mesh needs more than a standard runner's 16 GB of memory (rg60-001
 # attempt, run 46066643405: killed at 15.25 GB resident, before the first step), so ci/host.sh adds a swap file of this
 # many GiB on the runner disk for these cases. Swap changes where pages live, not a computed value.
