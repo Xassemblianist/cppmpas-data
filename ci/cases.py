@@ -58,6 +58,10 @@ LONG_CASES = {
 # Long cases on the 163842-cell meshes run no 10-step bisection phase (their short case has it), so that the two
 # trials' forecasts fit in one runner job.
 NO_STEPS_CASES = ("RG60L", "RGVRL")
+# One-rank atmosphere_model on a 163842-cell mesh needs more than a standard runner's 16 GB of memory (rg60-001
+# attempt, run 46066643405: killed at 15.25 GB resident, before the first step), so ci/host.sh adds a swap file of this
+# many GiB on the runner disk for these cases. Swap changes where pages live, not a computed value.
+SWAP_GIB = {case: 40 for case in ("RG60", "RG60L", "RGVR", "RGVRL")}
 # Each real-data case's ci/ package directory and the graph file kept from its mesh archive.
 RG_PACKAGES = {case: ("rg", "x1.10242.graph.info") for case in ("RG", "RG24", "RGCP", "RGCP24")}
 RG_PACKAGES.update({case: ("rg60", "x1.163842.graph.info") for case in ("RG60", "RG60L")})
@@ -519,6 +523,7 @@ if __name__ == "__main__":
     cli = argparse.ArgumentParser(description=__doc__)
     select = cli.add_subparsers(dest="mode", required=True)
     select.add_parser("list").add_argument("cases")
+    select.add_parser("swap").add_argument("cases")
     prep = select.add_parser("prepare")
     prep.add_argument("case", choices=CASES)
     prep.add_argument("downloads", type=Path)
@@ -528,6 +533,8 @@ if __name__ == "__main__":
     args = cli.parse_args()
     if args.mode == "list":
         print(" ".join(parse_cases(args.cases)))
+    elif args.mode == "swap":
+        print(max(SWAP_GIB.get(case, 0) for case in parse_cases(args.cases)))
     elif args.mode == "prepare":
         prepare(args.case, args.downloads, args.build, args.trial)
     else:

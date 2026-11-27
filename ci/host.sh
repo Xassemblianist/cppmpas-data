@@ -153,6 +153,27 @@ if [[ -n "${REQUIRE_CPU_VENDOR:-}" && "$vendor" != "$REQUIRE_CPU_VENDOR" ]]; the
     echo "The runner CPU vendor is $vendor, not $REQUIRE_CPU_VENDOR; nothing was run" >&2
     exit 3
 fi
+# Memory: a swap file for the cases that need more than the runner's memory (ci/cases.py SWAP_GIB), and a sampler
+# that records used memory and swap every 10 s; its peak is printed when the job ends, also on failure.
+swap_gib=$(python3 ci/cases.py swap "$CASE_LIST")
+if (( swap_gib > 0 )); then
+    sudo fallocate -l "${swap_gib}G" /swapfile.mpasref
+    sudo chmod 600 /swapfile.mpasref
+    sudo mkswap /swapfile.mpasref > /dev/null
+    sudo swapon /swapfile.mpasref
+fi
+free -k
+(while sleep 10; do
+    awk -v t="$(date -u +%FT%TZ)" '/^MemTotal:/ {mt=$2} /^MemAvailable:/ {ma=$2} /^SwapTotal:/ {st=$2}
+        /^SwapFree:/ {sf=$2} END {print t, mt - ma, st - sf}' /proc/meminfo
+done) > "$work/memory.log" &
+sampler=$!
+memory_peak() {
+    kill "$sampler" 2> /dev/null || true
+    awk '{u = $2 + $3; if (u > m) {m = u; line = $0}} END {print "Peak used memory + swap:", m, "KiB (time, used KiB, swap KiB:", line ")"}' \
+        "$work/memory.log" || true
+}
+trap memory_peak EXIT
 bash ci/inputs.sh cases "$work/downloads" "${case_ids[@]}"
 gh release download mpas-build --repo "$slug" --pattern "$asset" --dir "$work"
 BUILD_SHA256=$(sha256sum "$work/$asset" | cut -d' ' -f1)

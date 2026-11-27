@@ -30,3 +30,11 @@ The files here are ci/rg's, with these changes only:
   the 1-h history interval of RG60 and the 3-h one of RG60L.
 
 `ci/cases.py` changes only `config_run_duration` and the stream intervals, as for RG.
+
+## Memory
+
+One-rank `atmosphere_model` on this mesh needs more than the 16 GB of a standard GitHub runner: the first attempt
+(run 46066643405, Intel Xeon 6975P-C, MemTotal 16078396 kB, no swap) was killed by the kernel at a peak resident set
+of 15251176 KiB, 8 s into the steps run, before its first time step (`init_atmosphere_model` peaked at 6404936 KiB).
+`ci/host.sh` therefore adds a swap file (`ci/cases.py` `SWAP_GIB`) on the runner disk for RG60, RG60L, RGVR and RGVRL
+and prints the peak of used memory plus swap. Swap moves pages, not values: the run is the same one-rank run.
