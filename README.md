@@ -117,6 +117,8 @@ restart-run output falls on a 3-hourly history time of the forecast. `RGR24/cont
 | --- | --- | --- | --- | --- | --- |
 | `mpas842-dbl-rgr-001` | RGR | 46131461178 | Intel Xeon 6975P-C | 1352722570 B (1 part) | `c4720917afbbfed2e2080187fb2378eb07196c1d42562ac2c426f342debc8264` |
 | `mpas842-dbl-rgr-003` | RGR | 46135179230 | AMD EPYC 9V45 | 1352722492 B (1 part) | `e0f34e7519c1c63828aea8b48bed6d6754e310a0a22f88e0819e84e9a99a9eb7` |
+| `mpas842-dbl-rgr24-001` | RGR24 | 46150240751 | Intel Xeon 6975P-C | 2040511681 B (2 parts) | `6025cb8ae7b3a1881ef01d05fc5bf9bff38a073ffd0519bca7ad2ec241a45d33` |
+| `mpas842-dbl-rgr24-002` | RGR24 | 46150243641 | AMD EPYC 9V74 | 2040511671 B (2 parts) | `f32203c03189fb233c655ab4d106175da91c06155e856fe8a3ff0b869b7e7a1c` |
 
 Both from build asset `mpas-8.4.2-double-7be24aab….tar.zst`; each run's two trials were identical, and rgr-001 =
 rgr-003 (`refcompare` run 46135943408: 129 files, 11 NetCDF, 0 differences). (`mpas842-dbl-rgr-002` does not exist:
@@ -125,6 +127,12 @@ equals rg-004's in every variable. MPAS's restarted run does not continue its un
 02:00, 45 of the 99 history variables differ (`continuity.txt`), among them the state (u, w, theta, rho, the
 moist species), the surface and soil fields and the accumulated rain; the alarms that start again at 01:10 are one
 cause (radiation at 01:10 and 01:40 instead of 01:30).
+
+rgr24-001 = rgr24-002 (`refcompare` run 46155516685: 145 files, 27 NetCDF, 0 differences); each run's two trials
+were identical, and RGR24's 12:10 checkpoint equals rg24-001's in every variable (only parent_id, whose first line is
+the random file_id of the trial's init file, differs). At 24:00 the restart run's checkpoint and the uninterrupted
+forecast's history differ in 38 of the 90 variables both hold (`RGR24/continuity.txt`): the moist species, u, w, rho,
+theta, surface pressure, the accumulated rain, the PBL and surface fields and the soil state.
 
 ## convection_permitting references
 
