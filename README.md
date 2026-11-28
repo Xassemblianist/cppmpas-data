@@ -23,8 +23,8 @@ run), and the reference is published only when the two trials match.
 
 Cases: JW (Jablonowski-Williamson baroclinic wave), SC (supercell, Kessler), MW (mountain wave) from NCAR's
 idealized test-case packages, and RG: a real-data forecast on the 240-km x1.10242 mesh with the mesoscale_reference
-physics suite from one GFS analysis (inputs and changes in ci/rg/README.md), with RG24 its 24 h forecast and RGR its
-restart run (below); and RGCP
+physics suite from one GFS analysis (inputs and changes in ci/rg/README.md), with RG24 its 24 h forecast, RGR its
+restart run and RGR24 the restart of RG24 (below); and RGCP
 and RGCP24: the same two runs with the convection_permitting suite (Thompson, Grell-Freitas, MYNN), whose Thompson
 tables MPAS's build_tables writes in each trial (ci/rgcp/README.md); RG60 and RG60L: RG's recipe on NCAR's 60-km
 quasi-uniform mesh x1.163842 (ci/rg60/README.md); RG120 and RG120L: on the 120-km x1.40962 (ci/rg120/README.md);
@@ -104,6 +104,14 @@ that trial's checkpoint and init file (`parent_id`).
 
 `RGR/continuity.txt` records MPAS against itself: the restart run's history at 02:00 against the uninterrupted
 forecast's, variable by variable (ci/cases.py `continuity`). A difference there is recorded, not an error.
+
+RGR24 is the long restart: RG24's init and 24 h forecast (the same namelists and streams, so the same 12:10
+checkpoint), then `restart/` from `restart.2026-10-12_12.10.00.nc` with `config_start_time = '2026-10-12_12:10:00'`
+to 24:00 (11 h 50 min, 71 steps). Its history and diagnostics streams write every 3 h after the restart (15:10,
+18:10, 21:10) and its checkpoint is written at the end, `restart.2026-10-13_00.00.00.nc`, so the final state is in
+the reference. 71 is prime: no output interval longer than one step both divides the run and ends at 24:00, and no
+restart-run output falls on a 3-hourly history time of the forecast. `RGR24/continuity.txt` therefore compares the
+24:00 checkpoint with the forecast's 24:00 history in the variables both hold. RGR24 has no `steps/`.
 
 | Tag | Case | Run | Runner CPU | Size | Archive SHA-256 |
 | --- | --- | --- | --- | --- | --- |

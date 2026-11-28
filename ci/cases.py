@@ -35,6 +35,9 @@ CASES = {
     # restart: atmosphere_model restarted from that forecast's checkpoint (config_do_restart = true), with history,
     # diagnostics and one more restart (RESTART_CASES). It has no steps phase (RG has it).
     "RGR": (7, "x1.10242_static.tar.gz", "x1.10242.static.nc"),
+    # RGR24: RG24's 24 h forecast (the same init, namelists and streams, so the same 12:10 checkpoint), then the
+    # restart phase from that checkpoint to 24:00 (RESTART_CASES). No steps phase (RG24 has it).
+    "RGR24": (7, "x1.10242_static.tar.gz", "x1.10242.static.nc"),
     # RGCP and RGCP24: RG and RG24 with config_physics_suite = 'convection_permitting' (ci/rgcp/README.md). A
     # fourth phase, tables, runs MPAS's build_tables before the init, and both model runs read its Thompson tables.
     "RGCP": (7, "x1.10242_static.tar.gz", "x1.10242.static.nc"),
@@ -56,12 +59,13 @@ CASES = {
     "RGV48": (7, "x5.30210.tar.gz", "x5.30210.grid.nc"),
     "RGV48L": (7, "x5.30210.tar.gz", "x5.30210.grid.nc"),
 }
-RG_CASES = ("RG", "RG24", "RGR", "RGCP", "RGCP24", "RG60", "RG60L", "RGVR", "RGVRL", "RG120", "RG120L", "RGV48", "RGV48L")
+RG_CASES = ("RG", "RG24", "RGR", "RGR24", "RGCP", "RGCP24", "RG60", "RG60L", "RGVR", "RGVRL", "RG120", "RG120L", "RGV48", "RGV48L")
 CP_CASES = ("RGCP", "RGCP24")
 STATIC_CASES = ("RGVR", "RGVRL", "RGV48", "RGV48L")
 # Long cases: (forecast seconds, history interval seconds); one restart one step after the midpoint.
 LONG_CASES = {
     "RG24": (86400, 3 * 3600),
+    "RGR24": (86400, 3 * 3600),
     "RGCP24": (86400, 3 * 3600),
     "RG60L": (3 * 3600, 3 * 3600),
     "RGVRL": (3 * 3600, 3 * 3600),
@@ -70,14 +74,19 @@ LONG_CASES = {
 }
 # Long cases on the 163842-cell meshes run no 10-step bisection phase (their short case has it), so that the two
 # trials' forecasts fit in one runner job.
-NO_STEPS_CASES = ("RG60L", "RGVRL", "RGV48L", "RGR")
-# Restart cases: (restart run seconds, output interval seconds of its history and diagnostics streams). The restart
-# phase starts at the forecast's checkpoint. MPAS anchors every output alarm and the physics alarms at the clock's
+NO_STEPS_CASES = ("RG60L", "RGVRL", "RGV48L", "RGR", "RGR24")
+# Restart cases: (restart run seconds, output interval seconds of its history and diagnostics streams, seconds of its
+# checkpoint after the restart, or None for one step after the midpoint). The restart phase starts at the forecast's
+# checkpoint. MPAS anchors every output alarm and the physics alarms at the clock's
 # start time, which on a restart is the checkpoint (xml_stream_parser.c:1291-1296 reference_time 'initial_time';
 # mpas_atmphys_manager.F:466-650), and does not write history or diagnostics at that time (mpas_atm_core.F:669-673).
 # RGR restarts at 01:10 and writes every 50 min, so its first history is at 02:00, a time of the forecast's own
 # history; its checkpoint is one step after the midpoint, as in the forecast (02:10).
-RESTART_CASES = {"RGR": (6000, 3000)}
+# RGR24 restarts at 12:10 and runs to 24:00 (11 h 50 min, 71 steps: 71 is prime, so no interval longer than one step
+# both divides the run and ends at 24:00). Its history and diagnostics write every 3 h after the restart (15:10, 18:10,
+# 21:10), none a time of the forecast's history, and its checkpoint is written at the end, 24:00, so the final state
+# is in the reference; continuity.txt compares that checkpoint with the forecast's 24:00 history.
+RESTART_CASES = {"RGR": (6000, 3000, None), "RGR24": (42600, 3 * 3600, 42600)}
 RESTART_PHASE = "restart"
 # One-rank atmosphere_model on a 163842-cell mesh needs more than a standard runner's 16 GB of memory (rg60-001
 # attempt, run 46066643405: killed at 15.25 GB resident, before the first step), so ci/host.sh adds a swap file of this
@@ -87,7 +96,7 @@ SWAP_GIB = {case: 40 for case in ("RG60", "RG60L", "RGVR", "RGVRL")}
 # 14195472 KiB resident (run 46076927558) on a 16 GB runner, so RGV48 gets swap too.
 SWAP_GIB.update({case: 16 for case in ("RGV48", "RGV48L")})
 # Each real-data case's ci/ package directory and the graph file kept from its mesh archive.
-RG_PACKAGES = {case: ("rg", "x1.10242.graph.info") for case in ("RG", "RG24", "RGR", "RGCP", "RGCP24")}
+RG_PACKAGES = {case: ("rg", "x1.10242.graph.info") for case in ("RG", "RG24", "RGR", "RGR24", "RGCP", "RGCP24")}
 RG_PACKAGES.update({case: ("rg60", "x1.163842.graph.info") for case in ("RG60", "RG60L")})
 RG_PACKAGES.update({case: ("rgvr", "x4.163842.graph.info") for case in ("RGVR", "RGVRL")})
 RG_PACKAGES.update({case: ("rg120", "x1.40962.graph.info") for case in ("RG120", "RG120L")})
@@ -364,8 +373,11 @@ def prepare(case, downloads, build, trial):
                     geog_datasets=list(GEOG_DATASETS), geog_data_path=str(GEOG_DIR) + "/")
     diagnostics = stream(package_streams, "diagnostics") if case in RESTART_CASES else None
     if case in RESTART_CASES:
-        run_seconds, every = RESTART_CASES[case]
-        if run_seconds % every or every % dt or run_seconds % dt:
+        run_seconds, every, checkpoint_seconds = RESTART_CASES[case]
+        if checkpoint_seconds is None:
+            checkpoint_seconds = (run_seconds // (2 * dt) + 1) * dt
+        if (every > run_seconds or every % dt or run_seconds % dt or checkpoint_seconds % dt
+                or not 0 < checkpoint_seconds <= run_seconds):
             raise ValueError(f"{case} restart run {run_seconds} s, output {every} s, dt {dt} s disagree")
         if forecast_seconds < restart_seconds:
             raise ValueError(f"{case} forecast ends before its checkpoint")
@@ -374,7 +386,7 @@ def prepare(case, downloads, build, trial):
         plan.update(phases=list(plan_phases(plan)) + [RESTART_PHASE],
                     restart_run={"start_seconds": restart_seconds, "run_seconds": run_seconds,
                                  "output_interval_seconds": every,
-                                 "restart_seconds": (run_seconds // (2 * dt) + 1) * dt,
+                                 "restart_seconds": checkpoint_seconds,
                                  "diagnostics_template": flat_name(diagnostics.get("filename_template")),
                                  "start_time": stamp_of(restart_start),
                                  "input_restart": expand(restart_template, restart_start)})
@@ -621,10 +633,12 @@ def validate(trial):
 
 def continuity(trial):
     """Restart cases: the restart run's history against the forecast's (the run without the restart) at every time
-    both wrote, as lines for continuity.txt. A difference is recorded, not an error: MPAS's restart need not continue
-    the uninterrupted run bit for bit (its alarms start again at the checkpoint, RESTART_CASES)."""
+    both wrote, and its checkpoint against the forecast's history at the checkpoint's time, as lines for
+    continuity.txt. A difference is recorded, not an error: MPAS's restart need not continue the uninterrupted run bit
+    for bit (its alarms start again at the checkpoint, RESTART_CASES)."""
     import netCDF4 as nc
     import nc_same
+    import numpy as np
 
     plan = json.loads((trial / "plan.json").read_text())
     lines = []
@@ -641,8 +655,29 @@ def continuity(trial):
             total = len(data.variables)
         lines.append(f"{'SAME' if not variables else 'DIFFERENT'} forecast/{path.name} vs {RESTART_PHASE}/{path.name}: "
                      f"{len(variables)} of {total} variables differ")
+    # The restart run's checkpoint against the forecast's history at the same time (RGR24's at 24:00), in the
+    # variables both files hold: their raw values, type and shape.
+    history_files = {p.name: p for p in files_at(trial / "forecast", plan["history_template"])}
+    for path in files_at(trial / RESTART_PHASE, plan["restart_template"]):
+        moment = re.fullmatch(r".*?([0-9]{4})-([0-9]{2})-([0-9]{2})_([0-9]{2})\.([0-9]{2})\.([0-9]{2}).*", path.name)
+        if not moment:
+            continue
+        name = expand(plan["history_template"], datetime(*(int(x) for x in moment.groups())))
+        if name not in history_files:
+            continue
+        with nc.Dataset(history_files[name]) as left, nc.Dataset(path) as right:
+            for data in (left, right):
+                data.set_auto_maskandscale(False)
+                data.set_auto_chartostring(False)
+            common = [v for v in left.variables if v in right.variables]
+            differ = [v for v in common
+                      if left[v].dtype != right[v].dtype or left[v].shape != right[v].shape
+                      or np.asarray(left[v][...]).tobytes() != np.asarray(right[v][...]).tobytes()]
+        lines += [f"DIFF forecast/{name} vs {RESTART_PHASE}/{path.name}: variable {v}" for v in differ]
+        lines.append(f"{'SAME' if not differ else 'DIFFERENT'} forecast/{name} vs {RESTART_PHASE}/{path.name}: "
+                     f"{len(differ)} of {len(common)} common variables differ")
     if not lines:
-        raise ValueError("The restart run wrote no history at a time of the forecast's history")
+        raise ValueError("The restart run wrote no history or checkpoint at a time of the forecast's history")
     return lines
 
 

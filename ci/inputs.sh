@@ -11,11 +11,11 @@ dest=${2:?download directory required}
 shift 2
 case "$mode" in
     build) roles=(build) ;;
-    cases)   # RG24, RGR, RGCP and RGCP24 use RG's inputs; the larger-mesh cases also RG's first-guess file
+    cases)   # RG24, RGR, RGR24, RGCP and RGCP24 use RG's inputs; the larger-mesh cases also RG's first-guess file
         roles=()
         for id in "$@"; do
             case "$id" in
-                RG24|RGR|RGCP|RGCP24) ids=(RG) ;;
+                RG24|RGR|RGR24|RGCP|RGCP24) ids=(RG) ;;
                 RG60|RG60L) ids=(RG RG60) ;;
                 RGVR|RGVRL) ids=(RG RGVR GEOG) ;;
                 RG120|RG120L) ids=(RG RG120) ;;
