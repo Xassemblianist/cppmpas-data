@@ -5,9 +5,11 @@ of every variable, all in file order and without masking, scaling or character c
 
 MPAS writes two global attributes that differ between identical runs (src/framework/mpas_stream_manager.F
 and src/framework/mpas_bootstrapping.F): `file_id`, ten random characters from rand() seeded with the
-wall-clock second, and `parent_id`, whose first line is the `file_id` of the file the run started from.
-Each must have that form on both sides; only the random characters themselves are not compared.
-ci/cases.py checks that `parent_id` names the trial's own initial file.
+wall-clock second, and `parent_id`, whose first line is the `file_id` of the file the run started from,
+followed by that file's own `parent_id`. So a model output's `parent_id` starts with one random line for each
+file of the chain the trial wrote (init, and static before it in the static cases). Each must have that form on
+both sides; only the random characters themselves are not compared. ci/cases.py checks that the chain names the
+trial's own files.
 """
 import argparse
 from itertools import product
@@ -37,9 +39,12 @@ def global_attributes(dataset):
                 raise ValueError(f"Unexpected file_id {value!r}")
             value = "<random>"
         elif name == "parent_id" and isinstance(value, str):
-            first, newline, rest = value.partition("\n")
-            if newline and RANDOM_ID.fullmatch(first):
-                value = "<random>\n" + rest
+            lines = value.split("\n")
+            for i, line in enumerate(lines[:-1]):
+                if not RANDOM_ID.fullmatch(line):
+                    break
+                lines[i] = "<random>"
+            value = "\n".join(lines)
         result.append((name, signature(value)))
     return result
 

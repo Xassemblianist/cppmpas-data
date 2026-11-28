@@ -458,6 +458,7 @@ def validate(trial):
         if (trial / "init" / plan["static_file"]).resolve() != (static / plan["static_file"]).resolve():
             raise ValueError(f"init/ does not read static/{plan['static_file']}")
         with nc.Dataset(static / plan["static_file"]) as data:
+            static_id = data.getncattr("file_id")
             missing = [f for f in ("ter", "ivgtyp", "isltyp", "var2d", "con", "oa1", "ol1", "albedo12m",
                                    "greenfrac", "soiltemp", "soilcomp", "soilcl1") if f not in data.variables]
         if missing:
@@ -465,6 +466,14 @@ def validate(trial):
     init_path = trial / "init" / plan["init_file"]
     with nc.Dataset(init_path) as data:
         init_id = data.getncattr("file_id")
+        init_parent = data.getncattr("parent_id").split("\n")
+    # In the static cases the init file descends from the trial's static file, so its parent_id starts with
+    # that file's file_id, and every model output's parent_id with init's file_id and then the static one.
+    chain = [init_id]
+    if "static" in plan_phases(plan):
+        if init_parent[0].strip() != static_id:
+            raise ValueError(f"{plan['init_file']} does not descend from static/{plan['static_file']}")
+        chain.append(static_id)
         start_stamps = records(init_path)
     if len(start_stamps) != 1:
         raise ValueError(f"Init file has {len(start_stamps)} records")
@@ -521,7 +530,8 @@ def validate(trial):
                         raise ValueError(f"{phase}/{path.name} {name} is {variable.dtype}, not double")
                     if variable.size and not np.isfinite(variable[...]).all():
                         raise ValueError(f"{phase}/{path.name} {name} holds NaN or infinity")
-                if phase not in INIT_CORE_PHASES and data.getncattr("parent_id").split("\n", 1)[0].strip() != init_id:
+                parent = [line.strip() for line in data.getncattr("parent_id").split("\n")]
+                if phase not in INIT_CORE_PHASES and parent[:len(chain)] != chain:
                     raise ValueError(f"{phase}/{path.name} does not descend from {plan['init_file']}")
 
 

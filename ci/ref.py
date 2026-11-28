@@ -221,7 +221,7 @@ def main():
         "comparison": {
             "trials": 2,
             "rule": "same NetCDF format, dimensions, variables, attributes and value bytes, in file order",
-            "random_global_attributes": ["file_id", "parent_id (first line)"],
+            "random_global_attributes": ["file_id", "parent_id (its leading file_id lines)"],
         },
         "cases": {},
     }
