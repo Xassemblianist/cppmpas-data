@@ -16,7 +16,7 @@ on:
         options: [double]
         default: double
       cases:
-        description: Space- or comma-separated IDs from JW, SC, MW, RG, RG24, RGCP, RGCP24, RG60, RG60L, RGVR, RGVRL
+        description: Space- or comma-separated IDs from JW, SC, MW, RG, RG24, RGCP, RGCP24, RG60, RG60L, RG120, RG120L, RGV48, RGV48L, RGVR, RGVRL
         type: string
         default: JW
       cpu_vendor:
