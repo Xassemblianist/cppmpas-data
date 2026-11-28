@@ -29,7 +29,9 @@ and RGCP24: the same two runs with the convection_permitting suite (Thompson, Gr
 tables MPAS's build_tables writes in each trial (ci/rgcp/README.md); RG60 and RG60L: RG's recipe on NCAR's 60-km
 quasi-uniform mesh x1.163842 (ci/rg60/README.md); RG120 and RG120L: on the 120-km x1.40962 (ci/rg120/README.md);
 RGV48 and RGV48L: on NCAR's 240-48 km variable-resolution mesh x5.30210, whose static fields MPAS's init_atmosphere
-computes in each trial from WPS geographic data (ci/rgv48/README.md). RGVR and RGVRL, the same on the 92-25 km
+computes in each trial from WPS geographic data (ci/rgv48/README.md). RGDEF: MPAS's own generated default namelist and streams on x1.40962
+(dt 720 s, config_len_disp from the mesh, 6 h history, 3 h diagnostics, daily restart) for 24 h, changed only in the
+start time (ci/rgdef/README.md); RGDT: the same with dt 480 s and a 09 UTC start, 6 h (ci/rgdt/README.md). RGVR and RGVRL, the same on the 92-25 km
 x4.163842, are defined but do not fit in a runner job (ci/rgvr/README.md). Every run preloads CPPWRF's Intel libmvec log/log10
 (ci/mvec_intel, see ci/ref.py), because the physics' vectorised logs differ in the last bits between Intel and AMD
 CPUs; with it the references are the same on any runner.

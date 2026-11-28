@@ -58,8 +58,16 @@ CASES = {
     "RG120L": (7, "x1.40962_static.tar.gz", "x1.40962.static.nc"),
     "RGV48": (7, "x5.30210.tar.gz", "x5.30210.grid.nc"),
     "RGV48L": (7, "x5.30210.tar.gz", "x5.30210.grid.nc"),
+    # RGDEF: MPAS's own generated default namelist.atmosphere and streams (namelist_gen and streams_gen, as the core
+    # Makefile's core_input_gen makes them) on x1.40962, the mesh of the default config_dt = 720 s, changed only in
+    # the start time (the GFS analysis) and a 24 h run (ci/rgdef/README.md): config_len_disp left out (0.0: MPAS
+    # takes the mesh's nominalMinDc), history every 6 h, diagnostics every 3 h and the restart at 1 day, all as
+    # generated. RGDT: the same with config_dt = 480 s and a 09 UTC start, a 6 h forecast (ci/rgdt/README.md).
+    "RGDEF": (7, "x1.40962_static.tar.gz", "x1.40962.static.nc"),
+    "RGDT": (7, "x1.40962_static.tar.gz", "x1.40962.static.nc"),
 }
-RG_CASES = ("RG", "RG24", "RGR", "RGR24", "RGCP", "RGCP24", "RG60", "RG60L", "RGVR", "RGVRL", "RG120", "RG120L", "RGV48", "RGV48L")
+RG_CASES = ("RG", "RG24", "RGR", "RGR24", "RGCP", "RGCP24", "RG60", "RG60L", "RGVR", "RGVRL", "RG120", "RG120L", "RGV48", "RGV48L",
+            "RGDEF", "RGDT")
 CP_CASES = ("RGCP", "RGCP24")
 STATIC_CASES = ("RGVR", "RGVRL", "RGV48", "RGV48L")
 # Long cases: (forecast seconds, history interval seconds); one restart one step after the midpoint.
@@ -71,7 +79,12 @@ LONG_CASES = {
     "RGVRL": (3 * 3600, 3 * 3600),
     "RG120L": (48 * 3600, 3 * 3600),
     "RGV48L": (12 * 3600, 3 * 3600),
+    "RGDEF": (86400, 6 * 3600),
+    "RGDT": (6 * 3600, 6 * 3600),
 }
+# Cases whose forecast runs the package's streams.atmosphere unchanged (the generated defaults): no stream interval
+# is set, and the restart is the package's own (RGDEF: output_interval 1_00:00:00, written at the end of the 24 h).
+DEFAULT_STREAM_CASES = ("RGDEF",)
 # Long cases on the 163842-cell meshes run no 10-step bisection phase (their short case has it), so that the two
 # trials' forecasts fit in one runner job.
 NO_STEPS_CASES = ("RG60L", "RGVRL", "RGV48L", "RGR", "RGR24")
@@ -101,6 +114,7 @@ RG_PACKAGES.update({case: ("rg60", "x1.163842.graph.info") for case in ("RG60", 
 RG_PACKAGES.update({case: ("rgvr", "x4.163842.graph.info") for case in ("RGVR", "RGVRL")})
 RG_PACKAGES.update({case: ("rg120", "x1.40962.graph.info") for case in ("RG120", "RG120L")})
 RG_PACKAGES.update({case: ("rgv48", "x5.30210.graph.info") for case in ("RGV48", "RGV48L")})
+RG_PACKAGES.update({"RGDEF": ("rgdef", "x1.40962.graph.info"), "RGDT": ("rgdt", "x1.40962.graph.info")})
 # The WPS geographic data sets the static stage reads (mpas_init_atm_static.F, mpas_init_atm_gwd.F, for the default
 # config_*_data options): each tarball holds one top-level directory of that name, extracted under GEOG_DIR, which
 # namelist.init_atmosphere.static names as config_geog_data_path.
@@ -118,6 +132,16 @@ TABLES_LOG = "build_tables.log"
 # RG's first-guess file: the release-safe name in `inputs`, and the name init_atmosphere reads (config_met_prefix
 # 'FILE' and config_start_time).
 RG_MET = ("rg-gfs-20261012T00.wps", "FILE:2026-10-12_00")
+# RGDT starts at 09 UTC: its init (config_start_time 2026-10-12_09:00:00) reads FILE:2026-10-12_09, which is RG's
+# 00 UTC analysis staged under that name. init_atmosphere opens the file by the start time's name and does not
+# compare the hdate inside it (mpas_init_atm_cases.F:3462, mpas_init_atm_read_met.F:119-130), so the initial state is
+# RG120's fields valid at 09 UTC: a configuration test of the start time (solar geometry, julian day, alarms), not a
+# meteorological analysis.
+RG_MET_NAMES = {"RGDT": "FILE:2026-10-12_09"}
+
+
+def met_name(case):
+    return RG_MET_NAMES.get(case, RG_MET[1])
 CI_DIR = Path(__file__).resolve().parent
 STEPS = 10
 STAMP = "$Y-$M-$D_$h.$m.$s"
@@ -237,7 +261,7 @@ def stage_rg(case, downloads, package):
                     shutil.copyfileobj(data, out)
     if not (package / mesh).is_file():
         raise ValueError(f"{archive} lacks the static file {mesh}")
-    shutil.copyfile(downloads / RG_MET[0], package / flat_name(RG_MET[1]))
+    shutil.copyfile(downloads / RG_MET[0], package / flat_name(met_name(case)))
     for item in sorted((CI_DIR / directory).iterdir()):
         if item.name.startswith(PACKAGE_PREFIXES):
             shutil.copyfile(item, package / item.name)
@@ -310,10 +334,10 @@ def prepare(case, downloads, build, trial):
     for name in ("namelist.init_atmosphere", "streams.init_atmosphere"):
         shutil.copyfile(package / name, init / name)
     if case in RG_CASES:
-        (init / RG_MET[1]).symlink_to(Path("..") / "package" / RG_MET[1])
+        (init / met_name(case)).symlink_to(Path("..") / "package" / met_name(case))
         if nml_value(init_text, "config_met_prefix") + ":" + nml_value(init_text, "config_start_time")[:13] \
-                != RG_MET[1]:
-            raise ValueError("RG init namelist does not read " + RG_MET[1])
+                != met_name(case):
+            raise ValueError("RG init namelist does not read " + met_name(case))
     init_streams = ET.parse(init / "streams.init_atmosphere").getroot()
     if flat_name(stream(init_streams, "input").get("filename_template")) != init_input:
         raise ValueError(f"{case} init input is not {init_input}")
@@ -355,6 +379,13 @@ def prepare(case, downloads, build, trial):
         if forecast_seconds % history_seconds or history_seconds % dt:
             raise ValueError(f"{case} forecast {forecast_seconds} s, history {history_seconds} s, dt {dt} s disagree")
     restart_seconds = (forecast_seconds // (2 * dt) + 1) * dt
+    if case in DEFAULT_STREAM_CASES:
+        restart_seconds = interval(stream(package_streams, "restart").get("output_interval"))
+        if restart_seconds % dt or not 0 < restart_seconds <= forecast_seconds \
+                or interval(history.get("output_interval")) != history_seconds:
+            raise ValueError(f"{case} package restart {restart_seconds} s or history does not fit the forecast")
+        if nml_value(atm_text, "config_run_duration") != duration(forecast_seconds):
+            raise ValueError(f"{case} package config_run_duration is not the {forecast_seconds} s forecast")
     plan = {
         "case": case, "init_case": init_case, "mesh": mesh, "init_file": init_file, "dt_seconds": dt,
         "bisection_steps": STEPS, "bisection_template": BISECTION_TEMPLATE,
@@ -456,6 +487,9 @@ def prepare(case, downloads, build, trial):
             })
             for field in INITDUMP_FIELDS:
                 ET.SubElement(initdump, "var", {"name": field})
+        if phase == "forecast" and case in DEFAULT_STREAM_CASES:
+            shutil.copyfile(package / "streams.atmosphere", run / "streams.atmosphere")  # as generated
+            continue
         tree.write(run / "streams.atmosphere", encoding="unicode")
     (trial / "plan.json").write_text(json.dumps(plan, indent=2) + "\n")
 
