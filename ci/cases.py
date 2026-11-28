@@ -58,7 +58,7 @@ STATIC_CASES = ("RGVR", "RGVRL", "RGV48", "RGV48L")
 LONG_CASES = {
     "RG24": (86400, 3 * 3600),
     "RGCP24": (86400, 3 * 3600),
-    "RG60L": (6 * 3600, 3 * 3600),
+    "RG60L": (3 * 3600, 3 * 3600),
     "RGVRL": (3 * 3600, 3 * 3600),
     "RG120L": (48 * 3600, 3 * 3600),
     "RGV48L": (12 * 3600, 3 * 3600),
@@ -467,6 +467,7 @@ def validate(trial):
     with nc.Dataset(init_path) as data:
         init_id = data.getncattr("file_id")
         init_parent = data.getncattr("parent_id").split("\n")
+    start_stamps = records(init_path)
     # In the static cases the init file descends from the trial's static file, so its parent_id starts with
     # that file's file_id, and every model output's parent_id with init's file_id and then the static one.
     chain = [init_id]
@@ -474,7 +475,6 @@ def validate(trial):
         if init_parent[0].strip() != static_id:
             raise ValueError(f"{plan['init_file']} does not descend from static/{plan['static_file']}")
         chain.append(static_id)
-        start_stamps = records(init_path)
     if len(start_stamps) != 1:
         raise ValueError(f"Init file has {len(start_stamps)} records")
     start = time_value(start_stamps[0])

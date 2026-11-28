@@ -88,11 +88,13 @@ if [[ "$mode" == compare ]]; then
         gh release download "$tag" --repo "$slug" --dir "$work/$side.download"
         (
             cd "$work/$side.download"
+            # Each part, then the whole archive as one stream, then the archive unpacked from the parts: no
+            # joined copy on the disk (a 163842-cell reference is about 20 GB compressed).
             sha256sum -c --ignore-missing "$tag.sha256"
-            cat "$tag".tar.zst.part* > "$tag.tar.zst"
-            rm "$tag".tar.zst.part*
-            sha256sum -c --ignore-missing "$tag.sha256"
-            zstd -q -dc "$tag.tar.zst" | tar -xf - -C "$work/$side"
+            whole=$(cat "$tag".tar.zst.part* | sha256sum | cut -d' ' -f1)
+            grep -q -x "$whole  $tag.tar.zst" "$tag.sha256" || { echo "$tag.tar.zst: SHA-256 mismatch" >&2; exit 1; }
+            echo "$tag.tar.zst: OK"
+            cat "$tag".tar.zst.part* | zstd -q -dc | tar -xf - -C "$work/$side"
         )
         rm -r "$work/$side.download"
         (cd "$work/$side" && sha256sum --quiet -c SHA256SUMS)
@@ -201,6 +203,16 @@ docker run --rm --platform linux/amd64 --shm-size 1g "${memory_cap[@]}" -v "$rep
         tar --sort=name --mtime=@1788553670 --owner=0 --group=0 --numeric-owner -C /work/reference -cf - . \
             | zstd -q -T2 -10 -o "/work/$REF_TAG.tar.zst"
     '
+
+# The container is gone: free the swap file and the NetCDF files already in the archive (trials and reference;
+# their logs and receipts stay for the diagnostics), so that the parts fit beside the archive (run 46076631636,
+# RG60: "No space left on device" with the 40 GiB swap file still on the disk).
+if (( swap_gib > 0 )); then
+    sudo swapoff /swapfile.mpasref
+    sudo rm -f /swapfile.mpasref
+fi
+sudo find "$work/trials" "$work/reference" -name '*.nc' -type f -delete
+df -h "$work"
 
 # A release asset must be smaller than 2 GiB, so the archive is published in parts of 1900 MiB.
 cd "$work"

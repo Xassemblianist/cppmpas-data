@@ -31,10 +31,25 @@ The files here are ci/rg's, with these changes only:
 
 `ci/cases.py` changes only `config_run_duration` and the stream intervals, as for RG.
 
-## Memory
+## Memory and time
 
 One-rank `atmosphere_model` on this mesh needs more than the 16 GB of a standard GitHub runner: the first attempt
 (run 46066643405, Intel Xeon 6975P-C, MemTotal 16078396 kB, no swap) was killed by the kernel at a peak resident set
 of 15251176 KiB, 8 s into the steps run, before its first time step (`init_atmosphere_model` peaked at 6404936 KiB).
-`ci/host.sh` therefore adds a swap file (`ci/cases.py` `SWAP_GIB`) on the runner disk for RG60, RG60L, RGVR and RGVRL
-and prints the peak of used memory plus swap. Swap moves pages, not values: the run is the same one-rank run.
+`ci/host.sh` therefore adds a swap file (`ci/cases.py` `SWAP_GIB`, 40 GiB) on the runner disk for RG60, RG60L, RGVR
+and RGVRL, caps the container's memory 3 GiB below the runner's so that the model's pages, not the runner agent's,
+go to swap (without the cap the runner lost contact with GitHub: runs 46070002759, 46070005979), and prints the
+peak of used memory plus swap. Swap moves pages, not values: the run is the same one-rank run.
+
+With the swap file, RG60's two trials ran in run 46076631636 (Intel Xeon 6975P-C, 4 CPUs) and matched in all 18
+NetCDF files:
+
+| Phase | Trial A | Trial B | Peak resident set |
+| --- | --- | --- | --- |
+| init | 53.1 s | 54.7 s | 6405040 KiB |
+| steps (10 steps) | 1999.7 s | 2157.0 s | 12929188 KiB |
+| forecast (2 h, 20 steps) | 4210.4 s | 4051.6 s | 12916172 KiB |
+
+Used memory plus swap peaked at 39102264 KiB (14872336 KiB of memory, 24229928 KiB of swap). About 200 s per step,
+paging included, sets RG60L's length: a 3 h forecast (30 steps, about 6300 s per trial) is the longest whose two
+trials and packing fit in the job's 355-min limit with room for a slower runner; 6 h would need about 7 h.
