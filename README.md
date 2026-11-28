@@ -23,7 +23,8 @@ run), and the reference is published only when the two trials match.
 
 Cases: JW (Jablonowski-Williamson baroclinic wave), SC (supercell, Kessler), MW (mountain wave) from NCAR's
 idealized test-case packages, and RG: a real-data forecast on the 240-km x1.10242 mesh with the mesoscale_reference
-physics suite from one GFS analysis (inputs and changes in ci/rg/README.md), with RG24 its 24 h forecast; and RGCP
+physics suite from one GFS analysis (inputs and changes in ci/rg/README.md), with RG24 its 24 h forecast and RGR its
+restart run (below); and RGCP
 and RGCP24: the same two runs with the convection_permitting suite (Thompson, Grell-Freitas, MYNN), whose Thompson
 tables MPAS's build_tables writes in each trial (ci/rgcp/README.md); RG60 and RG60L: RG's recipe on NCAR's 60-km
 quasi-uniform mesh x1.163842 (ci/rg60/README.md); RG120 and RG120L: on the 120-km x1.40962 (ci/rg120/README.md);
@@ -86,6 +87,23 @@ and flags). `mpas-build` with `verify=true` builds the published asset of the cu
 fails unless `bin/`, `tables/` and `licenses/` are bit-identical; `refcompare` fetches two reference releases,
 checks their hashes and compares every case file (NetCDF as above, every other file byte for byte, MPAS's own
 logs excepted), printing each side's runner CPU.
+
+## Restart reference
+
+RGR is RG's init and 2 h forecast (the same namelists and streams, so the same 01:10 checkpoint) followed by a fourth
+phase, `restart/`: `atmosphere_model` with `config_do_restart = true` and `config_start_time = '2026-10-12_01:10:00'`,
+reading the forecast's `restart.2026-10-12_01.10.00.nc`, for 1 h 40 min (to 02:50). RGR has no `steps/`.
+
+MPAS starts every output alarm and the physics alarms (radiation, the physics diagnostics, ...) at the clock's start
+time, which on a restart is the checkpoint (`xml_stream_parser.c` reference_time `initial_time`,
+`mpas_atmphys_manager.F` physics_run_init), and it writes no history or diagnostics at that time
+(`mpas_atm_core.F:669-673`). So the restart run's history and diagnostics streams write every 50 min (02:00 and
+02:50): 02:00 is a history time of the forecast. Its own checkpoint is one step after the midpoint, as in the other
+cases: `restart.2026-10-12_02.10.00.nc`, with `restart_timestamp`. Each trial's restart outputs must descend from
+that trial's checkpoint and init file (`parent_id`).
+
+`RGR/continuity.txt` records MPAS against itself: the restart run's history at 02:00 against the uninterrupted
+forecast's, variable by variable (ci/cases.py `continuity`). A difference there is recorded, not an error.
 
 ## convection_permitting references
 

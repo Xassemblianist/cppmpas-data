@@ -31,6 +31,10 @@ CASES = {
     # RG24: the same case and inputs, with a 24 h forecast (LONG_CASES: history every 3 h, one restart one step
     # after 12 h). RG's own forecast is two history intervals (2 h).
     "RG24": (7, "x1.10242_static.tar.gz", "x1.10242.static.nc"),
+    # RGR: RG's forecast (the same init and 2 h forecast with its restart one step after 1 h), then a fourth phase,
+    # restart: atmosphere_model restarted from that forecast's checkpoint (config_do_restart = true), with history,
+    # diagnostics and one more restart (RESTART_CASES). It has no steps phase (RG has it).
+    "RGR": (7, "x1.10242_static.tar.gz", "x1.10242.static.nc"),
     # RGCP and RGCP24: RG and RG24 with config_physics_suite = 'convection_permitting' (ci/rgcp/README.md). A
     # fourth phase, tables, runs MPAS's build_tables before the init, and both model runs read its Thompson tables.
     "RGCP": (7, "x1.10242_static.tar.gz", "x1.10242.static.nc"),
@@ -52,7 +56,7 @@ CASES = {
     "RGV48": (7, "x5.30210.tar.gz", "x5.30210.grid.nc"),
     "RGV48L": (7, "x5.30210.tar.gz", "x5.30210.grid.nc"),
 }
-RG_CASES = ("RG", "RG24", "RGCP", "RGCP24", "RG60", "RG60L", "RGVR", "RGVRL", "RG120", "RG120L", "RGV48", "RGV48L")
+RG_CASES = ("RG", "RG24", "RGR", "RGCP", "RGCP24", "RG60", "RG60L", "RGVR", "RGVRL", "RG120", "RG120L", "RGV48", "RGV48L")
 CP_CASES = ("RGCP", "RGCP24")
 STATIC_CASES = ("RGVR", "RGVRL", "RGV48", "RGV48L")
 # Long cases: (forecast seconds, history interval seconds); one restart one step after the midpoint.
@@ -66,7 +70,15 @@ LONG_CASES = {
 }
 # Long cases on the 163842-cell meshes run no 10-step bisection phase (their short case has it), so that the two
 # trials' forecasts fit in one runner job.
-NO_STEPS_CASES = ("RG60L", "RGVRL", "RGV48L")
+NO_STEPS_CASES = ("RG60L", "RGVRL", "RGV48L", "RGR")
+# Restart cases: (restart run seconds, output interval seconds of its history and diagnostics streams). The restart
+# phase starts at the forecast's checkpoint. MPAS anchors every output alarm and the physics alarms at the clock's
+# start time, which on a restart is the checkpoint (xml_stream_parser.c:1291-1296 reference_time 'initial_time';
+# mpas_atmphys_manager.F:466-650), and does not write history or diagnostics at that time (mpas_atm_core.F:669-673).
+# RGR restarts at 01:10 and writes every 50 min, so its first history is at 02:00, a time of the forecast's own
+# history; its checkpoint is one step after the midpoint, as in the forecast (02:10).
+RESTART_CASES = {"RGR": (6000, 3000)}
+RESTART_PHASE = "restart"
 # One-rank atmosphere_model on a 163842-cell mesh needs more than a standard runner's 16 GB of memory (rg60-001
 # attempt, run 46066643405: killed at 15.25 GB resident, before the first step), so ci/host.sh adds a swap file of this
 # many GiB on the runner disk for these cases. Swap changes where pages live, not a computed value.
@@ -75,7 +87,7 @@ SWAP_GIB = {case: 40 for case in ("RG60", "RG60L", "RGVR", "RGVRL")}
 # 14195472 KiB resident (run 46076927558) on a 16 GB runner, so RGV48 gets swap too.
 SWAP_GIB.update({case: 16 for case in ("RGV48", "RGV48L")})
 # Each real-data case's ci/ package directory and the graph file kept from its mesh archive.
-RG_PACKAGES = {case: ("rg", "x1.10242.graph.info") for case in ("RG", "RG24", "RGCP", "RGCP24")}
+RG_PACKAGES = {case: ("rg", "x1.10242.graph.info") for case in ("RG", "RG24", "RGR", "RGCP", "RGCP24")}
 RG_PACKAGES.update({case: ("rg60", "x1.163842.graph.info") for case in ("RG60", "RG60L")})
 RG_PACKAGES.update({case: ("rgvr", "x4.163842.graph.info") for case in ("RGVR", "RGVRL")})
 RG_PACKAGES.update({case: ("rg120", "x1.40962.graph.info") for case in ("RG120", "RG120L")})
@@ -350,18 +362,40 @@ def prepare(case, downloads, build, trial):
     if case in STATIC_CASES:
         plan.update(phases=list(STATIC_PHASES), static_file=init_input,
                     geog_datasets=list(GEOG_DATASETS), geog_data_path=str(GEOG_DIR) + "/")
+    diagnostics = stream(package_streams, "diagnostics") if case in RESTART_CASES else None
+    if case in RESTART_CASES:
+        run_seconds, every = RESTART_CASES[case]
+        if run_seconds % every or every % dt or run_seconds % dt:
+            raise ValueError(f"{case} restart run {run_seconds} s, output {every} s, dt {dt} s disagree")
+        if forecast_seconds < restart_seconds:
+            raise ValueError(f"{case} forecast ends before its checkpoint")
+        start_stamp = nml_value(atm_text, "config_start_time")
+        restart_start = datetime.strptime(start_stamp, "%Y-%m-%d_%H:%M:%S") + timedelta(seconds=restart_seconds)
+        plan.update(phases=list(plan_phases(plan)) + [RESTART_PHASE],
+                    restart_run={"start_seconds": restart_seconds, "run_seconds": run_seconds,
+                                 "output_interval_seconds": every,
+                                 "restart_seconds": (run_seconds // (2 * dt) + 1) * dt,
+                                 "diagnostics_template": flat_name(diagnostics.get("filename_template")),
+                                 "start_time": stamp_of(restart_start),
+                                 "input_restart": expand(restart_template, restart_start)})
     if case in NO_STEPS_CASES:
         plan.update(phases=[phase for phase in plan_phases(plan) if phase != "steps"])
         for key in ("bisection_steps", "bisection_template", "bisection_fields", "initdump_template",
                     "initdump_fields"):
             del plan[key]
 
-    for phase, seconds in (("steps", STEPS * dt), ("forecast", forecast_seconds)):
+    restart_run = plan.get("restart_run")
+    for phase, seconds in (("steps", STEPS * dt), ("forecast", forecast_seconds),
+                           (RESTART_PHASE, restart_run and restart_run["run_seconds"])):
         if phase not in plan_phases(plan):
             continue
         run = trial / phase
         run.mkdir()
         (run / init_file).symlink_to(Path("..") / "init" / init_file)
+        if phase == RESTART_PHASE:
+            # The restart stream reads the forecast's checkpoint (mpas_atm_core.F:129-149); a restart run does not
+            # read the input stream, whose file is linked as in the other phases.
+            (run / restart_run["input_restart"]).symlink_to(Path("..") / "forecast" / restart_run["input_restart"])
         for table in sorted((build / "tables").iterdir()):
             (run / table.name).symlink_to(table.resolve())
         for name in plan.get("thompson_tables", []):
@@ -371,8 +405,11 @@ def prepare(case, downloads, build, trial):
             if item.name.endswith(".TBL") or item.name.startswith("stream_list.atmosphere."):
                 (run / item.name).unlink(missing_ok=True)
                 shutil.copyfile(item, run / item.name)
-        (run / "namelist.atmosphere").write_text(
-            set_nml(atm_text, "config_run_duration", f"'{duration(seconds)}'"))
+        text = set_nml(atm_text, "config_run_duration", f"'{duration(seconds)}'")
+        if phase == RESTART_PHASE:
+            text = set_nml(text, "config_do_restart", "true")
+            text = set_nml(text, "config_start_time", f"'{restart_run['start_time']}'")
+        (run / "namelist.atmosphere").write_text(text)
 
         tree = ET.parse(package / "streams.atmosphere",
                         parser=ET.XMLParser(target=ET.TreeBuilder(insert_comments=True)))
@@ -382,6 +419,10 @@ def prepare(case, downloads, build, trial):
             restart.set("output_interval", duration(restart_seconds))
             if case in LONG_CASES:
                 stream(root, "output").set("output_interval", duration(history_seconds))
+        elif phase == RESTART_PHASE:
+            restart.set("output_interval", duration(restart_run["restart_seconds"]))
+            for name in ("output", "diagnostics"):
+                stream(root, name).set("output_interval", duration(restart_run["output_interval_seconds"]))
         else:
             restart.set("output_interval", "none")
             # The forecast writes the package history; the short run writes only the bisection stream.
@@ -405,6 +446,19 @@ def prepare(case, downloads, build, trial):
                 ET.SubElement(initdump, "var", {"name": field})
         tree.write(run / "streams.atmosphere", encoding="unicode")
     (trial / "plan.json").write_text(json.dumps(plan, indent=2) + "\n")
+
+
+def stamp_of(moment):
+    """An MPAS time string of a real-data case (year >= 1000, so no calendar shift)."""
+    return moment.strftime("%Y-%m-%d_%H:%M:%S")
+
+
+def expand(template, moment):
+    """filename_template with $Y $M $D $h $m $s of a real-data time (mpas_expand_string)."""
+    for token, value in (("$Y", f"{moment.year:04}"), ("$M", f"{moment.month:02}"), ("$D", f"{moment.day:02}"),
+                         ("$h", f"{moment.hour:02}"), ("$m", f"{moment.minute:02}"), ("$s", f"{moment.second:02}")):
+        template = template.replace(token, value)
+    return flat_name(template)
 
 
 def files_at(directory, template):
@@ -512,6 +566,33 @@ def validate(trial):
     if has_steps and files_at(trial / "steps", plan["restart_template"]):
         raise ValueError("The short run wrote a restart file")
 
+    restart_run = plan.get("restart_run")
+    restart_chain = None
+    if restart_run:
+        # The restart run: history and diagnostics every output interval after its start (none at the start), one
+        # checkpoint and its restart_timestamp; every output descends from the forecast's checkpoint, then init.
+        run = trial / RESTART_PHASE
+        source = run / restart_run["input_restart"]
+        if not source.is_symlink() or source.resolve() != (forecast / restart_run["input_restart"]).resolve():
+            raise ValueError(f"{RESTART_PHASE}/ does not read forecast/{restart_run['input_restart']}")
+        if offsets([source], start) != [checkpoint]:
+            raise ValueError(f"{restart_run['input_restart']} is not the forecast's checkpoint")
+        first, every = restart_run["start_seconds"], restart_run["output_interval_seconds"]
+        expected = [timedelta(seconds=first + s) for s in range(every, restart_run["run_seconds"] + 1, every)]
+        for template in (plan["history_template"], restart_run["diagnostics_template"]):
+            found = files_at(run, template)
+            if offsets(found, start) != expected or len(found) != len(expected):
+                raise ValueError(f"{RESTART_PHASE}/ {[p.name for p in found]} do not hold every {every} s after "
+                                 f"the restart")
+        restarts = files_at(run, plan["restart_template"])
+        again = timedelta(seconds=first + restart_run["restart_seconds"])
+        marker = (run / plan["restart_timestamp_file"]).read_text().strip()
+        if len(restarts) != 1 or offsets(restarts, start) != [again] or time_value(marker) - start != again:
+            raise ValueError(f"Expected one restart at +{again} in {RESTART_PHASE}/, found "
+                             f"{[p.name for p in restarts]}, {marker!r}")
+        with nc.Dataset(source) as data:
+            restart_chain = [data.getncattr("file_id")] + chain
+
     # Every float written by the double-precision build is 8 bytes and finite, and every model output
     # names the trial's own initial file as its parent.
     import numpy as np
@@ -532,8 +613,37 @@ def validate(trial):
                     if variable.size and not np.isfinite(variable[...]).all():
                         raise ValueError(f"{phase}/{path.name} {name} holds NaN or infinity")
                 parent = [line.strip() for line in data.getncattr("parent_id").split("\n")]
-                if phase not in INIT_CORE_PHASES and parent[:len(chain)] != chain:
-                    raise ValueError(f"{phase}/{path.name} does not descend from {plan['init_file']}")
+                expected_chain = restart_chain if phase == RESTART_PHASE else chain
+                if phase not in INIT_CORE_PHASES and parent[:len(expected_chain)] != expected_chain:
+                    raise ValueError(f"{phase}/{path.name} does not descend from {plan['init_file']}"
+                                     + (" through the forecast's checkpoint" if phase == RESTART_PHASE else ""))
+
+
+def continuity(trial):
+    """Restart cases: the restart run's history against the forecast's (the run without the restart) at every time
+    both wrote, as lines for continuity.txt. A difference is recorded, not an error: MPAS's restart need not continue
+    the uninterrupted run bit for bit (its alarms start again at the checkpoint, RESTART_CASES)."""
+    import netCDF4 as nc
+    import nc_same
+
+    plan = json.loads((trial / "plan.json").read_text())
+    lines = []
+    restart_files = {p.name: p for p in files_at(trial / RESTART_PHASE, plan["history_template"])}
+    for path in files_at(trial / "forecast", plan["history_template"]):
+        if path.name not in restart_files:
+            continue
+        differences = list(nc_same.compare(path, restart_files[path.name]))
+        lines += [f"DIFF forecast/{path.name} vs {RESTART_PHASE}/{path.name}: {d}" for d in differences]
+        # The global attributes always differ (the namelist options config_do_restart, config_start_time and
+        # config_run_duration, and parent_id's extra file of the chain); the verdict is on the variables.
+        variables = [d for d in differences if not d.startswith("global attributes")]
+        with nc.Dataset(path) as data:
+            total = len(data.variables)
+        lines.append(f"{'SAME' if not variables else 'DIFFERENT'} forecast/{path.name} vs {RESTART_PHASE}/{path.name}: "
+                     f"{len(variables)} of {total} variables differ")
+    if not lines:
+        raise ValueError("The restart run wrote no history at a time of the forecast's history")
+    return lines
 
 
 def parse_cases(value):

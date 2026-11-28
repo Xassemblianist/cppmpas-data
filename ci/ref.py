@@ -248,6 +248,11 @@ def main():
             cases.validate(trial_path)
 
         compare_trials(replicas / "A", replicas / "B", case_path / "determinism.txt", phases)
+        if case in cases.RESTART_CASES:
+            # MPAS's restarted run against its own uninterrupted forecast, recorded (cases.continuity)
+            lines = cases.continuity(replicas / "A")
+            (case_path / "continuity.txt").write_text("\n".join(lines) + "\n")
+            print(*[line for line in lines if not line.startswith("DIFF ")], sep="\n", flush=True)
         stage_trial(replicas / "A", case_path)
         plan = json.loads((case_path / "plan.json").read_text())
         input_asset = downloads / cases.CASES[case][1]
