@@ -105,6 +105,19 @@ that trial's checkpoint and init file (`parent_id`).
 `RGR/continuity.txt` records MPAS against itself: the restart run's history at 02:00 against the uninterrupted
 forecast's, variable by variable (ci/cases.py `continuity`). A difference there is recorded, not an error.
 
+| Tag | Case | Run | Runner CPU | Size | Archive SHA-256 |
+| --- | --- | --- | --- | --- | --- |
+| `mpas842-dbl-rgr-001` | RGR | 46131461178 | Intel Xeon 6975P-C | 1352722570 B (1 part) | `c4720917afbbfed2e2080187fb2378eb07196c1d42562ac2c426f342debc8264` |
+| `mpas842-dbl-rgr-003` | RGR | 46135179230 | AMD EPYC 9V45 | 1352722492 B (1 part) | `e0f34e7519c1c63828aea8b48bed6d6754e310a0a22f88e0819e84e9a99a9eb7` |
+
+Both from build asset `mpas-8.4.2-double-7be24aab….tar.zst`; each run's two trials were identical, and rgr-001 =
+rgr-003 (`refcompare` run 46135943408: 129 files, 11 NetCDF, 0 differences). (`mpas842-dbl-rgr-002` does not exist:
+its dispatches with `cpu_vendor=AuthenticAMD` drew Intel runners and stopped before any work.) RGR's forecast
+equals rg-004's in every variable. MPAS's restarted run does not continue its uninterrupted forecast bit for bit: at
+02:00, 45 of the 99 history variables differ (`continuity.txt`), among them the state (u, w, theta, rho, the
+moist species), the surface and soil fields and the accumulated rain; the alarms that start again at 01:10 are one
+cause (radiation at 01:10 and 01:40 instead of 01:30).
+
 ## convection_permitting references
 
 | Tag | Case | Run | Runner CPU | Size | Archive SHA-256 |
