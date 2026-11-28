@@ -8,16 +8,20 @@ variable-resolution exercise, with the same GFS first-guess file (2026-10-12 00 
 - RGV48, like RG: steps 0-10 with the bisection and initdump streams, then a 2 h forecast with hourly history and
   one restart one step after 1 h.
 - RGV48L: a 12 h forecast (`ci/cases.py` `LONG_CASES`), history and diag every 3 h, one restart one step after 6 h,
-  and no steps phase (`NO_STEPS_CASES`; RGV48 has it): with two static phases of about 40 minutes each, a 24 h
-  forecast (360 steps of 240 s, about 25 s each) twice does not fit in the 6-hour job.
+  and no steps phase (`NO_STEPS_CASES`; RGV48 has it): with two static phases of up to 3686 s each (AMD EPYC 7763), a 24 h
+  forecast (360 steps of 240 s, 12 h took 2779-3003 s) twice does not fit in the 355-min job on every runner.
 
 ## Why this mesh
 
-NCAR's variable-resolution meshes on its mesh page start at 163842 cells (92-25 km x4.163842, ci/rgvr). One-rank
-`atmosphere_model` on 163842 cells needs more than a standard GitHub runner's 16 GB (the measurements are in
-ci/rg60/README.md and the top-level README), so this case uses the largest NCAR variable-resolution mesh that fits:
-x5.30210, which NCAR serves from the same mesh directory
-(`https://www2.mmm.ucar.edu/projects/mpas/atmosphere_meshes/x5.30210.tar.gz`) and uses in its tutorial.
+NCAR's variable-resolution meshes on its mesh page start at 163842 cells (92-25 km x4.163842, ci/rgvr), and that
+one does not fit in a GitHub runner job on one rank: the reasons, with the measured numbers, are in
+ci/rgvr/README.md. So these cases use the largest NCAR variable-resolution mesh that fits: x5.30210, which NCAR
+serves from the same mesh directory (`https://www2.mmm.ucar.edu/projects/mpas/atmosphere_meshes/x5.30210.tar.gz`)
+and uses in its tutorial.
+
+Measured (runs 46097754964, 46097588796, 46097228289, 46097618523): the static phase takes 2206-3686 s depending on
+the runner CPU, at 6.6 GB resident (the GWDO stage's global 30" arrays; with the 16 GiB swap file of `SWAP_GIB` the
+used memory plus swap peaked at 8.3 GB), the 10 steps 186-211 s and the 2 h forecast 531-566 s, all at 6.5 GB.
 
 ## Static fields
 

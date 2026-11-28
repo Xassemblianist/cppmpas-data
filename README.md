@@ -26,9 +26,10 @@ idealized test-case packages, and RG: a real-data forecast on the 240-km x1.1024
 physics suite from one GFS analysis (inputs and changes in ci/rg/README.md), with RG24 its 24 h forecast; and RGCP
 and RGCP24: the same two runs with the convection_permitting suite (Thompson, Grell-Freitas, MYNN), whose Thompson
 tables MPAS's build_tables writes in each trial (ci/rgcp/README.md); RG60 and RG60L: RG's recipe on NCAR's 60-km
-quasi-uniform mesh x1.163842 (ci/rg60/README.md); RGVR and RGVRL: RG's recipe on NCAR's 92-25 km variable-resolution
-mesh x4.163842, whose static fields MPAS's init_atmosphere computes in each trial from WPS geographic data
-(ci/rgvr/README.md). Every run preloads CPPWRF's Intel libmvec log/log10
+quasi-uniform mesh x1.163842 (ci/rg60/README.md); RG120 and RG120L: on the 120-km x1.40962 (ci/rg120/README.md);
+RGV48 and RGV48L: on NCAR's 240-48 km variable-resolution mesh x5.30210, whose static fields MPAS's init_atmosphere
+computes in each trial from WPS geographic data (ci/rgv48/README.md). RGVR and RGVRL, the same on the 92-25 km
+x4.163842, are defined but do not fit in a runner job (ci/rgvr/README.md). Every run preloads CPPWRF's Intel libmvec log/log10
 (ci/mvec_intel, see ci/ref.py), because the physics' vectorised logs differ in the last bits between Intel and AMD
 CPUs; with it the references are the same on any runner.
 
@@ -44,8 +45,9 @@ Per case directory:
   executables are unchanged and the stream changes no computed value.
 - `forecast/`: a run of two package history intervals (at least 11 steps) with the package history stream
   unchanged and one restart checkpoint, written one step after the midpoint, with its `restart_timestamp`.
-- `static/` (RGVR, RGVRL only): `x4.163842.static.nc`, written by `init_atmosphere_model`'s static and GWDO stages
-  from the grid file and the geographic data sets; the trial's `init/` reads it. RG60L and RGVRL have no `steps/`.
+- `static/` (RGV48, RGV48L, RGVR, RGVRL only): the mesh's `static.nc`, written by `init_atmosphere_model`'s static
+  and GWDO stages from the grid file and the geographic data sets; the trial's `init/` reads it. RG60L, RGV48L and
+  RGVRL have no `steps/`.
 - `tables/` (RGCP, RGCP24 only): the four `MP_THOMPSON_*_DATA.DBL` tables that `build_tables` wrote in that trial,
   and its output (`build_tables.log`); both atmosphere runs read them.
 - `package/`: the case's namelists, streams, stream lists, tables and README as published (without the mesh,
@@ -63,8 +65,10 @@ variable is 8 bytes and finite; every model output descends from that trial's ow
 was written. The two trials must then have the same NetCDF files with the same format, dimensions, variables,
 variable attributes, global attributes and raw value bytes, all in the same order, and the same text files.
 The only exception is in two global attributes that MPAS fills with random characters from `rand()` seeded
-by the wall clock: `file_id` (compared only as ten characters from `[0-9a-z]`) and the first line of
-`parent_id` (the `file_id` of the run's input file); the rest of `parent_id` is compared.
+by the wall clock: `file_id` (compared only as ten characters from `[0-9a-z]`) and the leading lines of
+`parent_id` that have that form (the `file_id` of the run's input file, then that file's own `parent_id`: init's,
+and in the static cases the static file's); the rest of `parent_id` is compared, and each trial's chain must name
+its own files.
 
 ## Releases
 
@@ -102,6 +106,42 @@ trials were identical, tables included. Cross-checks, compared with `refcompare`
 So with the Intel log/log10 preload, Intel and AMD runners give the same convection_permitting references; no other
 libmvec function needed replacing (ci/rgcp/README.md). The Thompson tables are also attached to
 `mpas842-dbl-rgcp-001` as separate assets with `mpas842-dbl-rgcp-001.tables.sha256`.
+
+## Larger-mesh references
+
+RG's recipe (one GFS analysis, 2026-10-12 00 UTC, mesoscale_reference suite) on larger NCAR meshes, every run on one
+MPI rank of a standard ubuntu-24.04 runner (4 CPUs, 16 GB). Namelist changes, inputs and the measured times and
+memory are in each case's README.
+
+| Tag | Case | Run | Runner CPU | Size | Archive SHA-256 |
+| --- | --- | --- | --- | --- | --- |
+| `mpas842-dbl-rg60-001` | RG60 | 46098059159 | Intel Xeon 6975P-C | 21420550594 B (11 parts) | `d20f2e7f0009dfaf1837bdf60490b0a4364906da0950ee5b7d12b1fb6d2f1013` |
+| `mpas842-dbl-rg60-002` | RG60 | 46097673427 | AMD EPYC 9V45 | 21420550645 B (11 parts) | `28cd16b173d2c6b976464d5e31a476c5ab51046c38490b7307729084ad2dd887` |
+| `mpas842-dbl-rg60l-001` | RG60L (3 h) | 46097281302 | Intel Xeon 6975P-C | 8959612967 B (5 parts) | `78c9275d8dd352364e55b44a5da44d14b7facdd43754c9d273fb92a56035dd11` |
+| `mpas842-dbl-rg120-001` | RG120 | 46076914266 | Intel Xeon 6975P-C | 5583976721 B (3 parts) | `057e2fe53c3acdeafb143b2b0338ea3452f6259dfee7f8ad4e8397fcbe4e316f` |
+| `mpas842-dbl-rg120-002` | RG120 | 46100210828 | AMD EPYC 9V45 | 5583977854 B (3 parts) | `84eb6d294b9e738dedfb3250558d045da69620e946dd7cd87cd7877e0f5c3767` |
+| `mpas842-dbl-rg120l-001` | RG120L (48 h) | 46076917966 | AMD EPYC 7763 | 10950679913 B (6 parts) | `22e68c364dc8e72a914ec75c1db4fff9576cdc1763c2bc7e864cb67fd56c2159` |
+| `mpas842-dbl-rg120l-002` | RG120L (48 h) | 46106335744 | Intel Xeon 6975P-C | 10950681339 B (6 parts) | `22f5b4fac3fa608408710d5afc69f0a812eca24957e070705cfb3f7d64817a23` |
+| `mpas842-dbl-rgv48-001` | RGV48 | 46097754964 | Intel Xeon Platinum 8573C | 4709097135 B (3 parts) | `9ebc35a80ef8a8f39faae7d524af6dcf75a68dbdfcbdf2d0de2f32091f068266` |
+| `mpas842-dbl-rgv48-002` | RGV48 | 46097588796 | AMD EPYC 7763 | 4709097157 B (3 parts) | `6257415c757717915959a19ad7709691179d3be0120b694c0d5130a16e4488ab` |
+| `mpas842-dbl-rgv48l-001` | RGV48L (12 h) | 46097228289 | Intel Xeon 6975P-C | 3561986876 B (2 parts) | `14d9f2e0071604ff273722488c9fd59b96e2b2dfa4d7c5ad737e31abc9ee5cfa` |
+| `mpas842-dbl-rgv48l-002` | RGV48L (12 h) | 46097618523 | AMD EPYC 9V74 | 3561986895 B (2 parts) | `a79433c633a33bcfcdcf6a58c34fb169a4b346f59eed974322f51937e912f445` |
+
+All come from build asset `mpas-8.4.2-double-7be24aab….tar.zst`; each run's two trials were identical. Intel and AMD,
+compared with `refcompare` (0 differences in every case file):
+
+- rg60-001 = rg60-002 (run 46120393807, 134 files);
+- rg120-001 = rg120-002 (run 46102277946, 134 files);
+- rgv48-001 = rgv48-002 (run 46111045041, 139 files);
+- rgv48l-001 = rgv48l-002 (run 46114186647, 127 files);
+- rg120l-001 = rg120l-002 (run 46128266028, 164 files).
+
+The 60-km mesh (163842 cells) needs more memory than the runner has: one-rank `atmosphere_model` is killed at
+15.25 GB resident without swap, so RG60 and RG60L run with a 40 GiB swap file and a capped container
+(`ci/host.sh`, ci/rg60/README.md), which makes a step take about 200 s. With that, NCAR's smallest
+variable-resolution mesh, 92-25 km x4.163842 (163842 cells, a 150 s step), would need about 8.4 h for its two
+trials, beyond the job limit (ci/rgvr/README.md), so the variable-resolution references use the 240-48 km
+x5.30210 of the MPAS tutorial.
 
 ## Dispatch
 

@@ -42,6 +42,7 @@ CASES = {
     # RGVR and RGVRL: RG's recipe on NCAR's 92-25 km variable-resolution mesh x4.163842 (ci/rgvr/README.md). NCAR
     # publishes no static file for it, so a fifth phase, static, runs init_atmosphere's static and GWDO stages on the
     # grid file with WPS geographic data first, and the init reads that trial's static file.
+    # Its two trials do not fit in one standard runner job (8.4 h estimated from measured steps; ci/rgvr/README.md).
     "RGVR": (7, "x4.163842.tar.gz", "x4.163842.grid.nc"),
     "RGVRL": (7, "x4.163842.tar.gz", "x4.163842.grid.nc"),
     # RG120 and RG120L: RG's recipe on NCAR's 120-km quasi-uniform mesh x1.40962 (ci/rg120/README.md); RGV48 and

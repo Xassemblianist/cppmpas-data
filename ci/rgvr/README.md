@@ -9,12 +9,26 @@ file (2026-10-12 00 UTC) and the same `mesoscale_reference` physics suite.
 - RGVRL: a longer forecast (`ci/cases.py` `LONG_CASES`), history and diag every 3 h, one restart one step after the
   midpoint, and no steps phase (`NO_STEPS_CASES`), as RG60L.
 
-## Why this mesh
+## It does not fit in a GitHub runner job
 
-It is the largest of NCAR's variable-resolution meshes whose two one-rank trials fit in one GitHub runner job
-(ubuntu-24.04: 4 CPUs, 16 GB of memory, 6-h job limit). The next one, 60-15 km x4.535554, has 535554 cells (3.3
-times as many) and needs a 90 s step (six times 15 km) instead of 150 s: about 8 times the work per simulated hour.
-The numbers measured on the runner are in the top-level README.
+x4.163842 is the smallest of NCAR's published variable-resolution meshes. Its two one-rank trials do not fit in one
+job of a standard GitHub runner (ubuntu-24.04: 4 CPUs, 16 GB of memory, the workflow's 355-min limit), so no RGVR or
+RGVRL reference is published and ci/rgv48 (x5.30210) is the variable-resolution case. The numbers:
+
+1. Memory. One-rank `atmosphere_model` on 163842 cells has a resident set of 12.9 GB on top of a 6.4 GB
+   initialisation, over 15.25 GB at its peak (RG60 without swap, run 46066643405, killed before its first step).
+   With the 40 GiB swap file and the capped container (`ci/host.sh`), RG60 runs, using up to 15.1 GB of memory
+   plus 24.4 GB of swap (run 46098059159).
+2. Time per step. Paging makes a step on 163842 cells take about 190-210 s (RG60: 10 steps in 1930-2157 s,
+   20 steps in 3815-4210 s). RGVR's step is 150 s, not RG60's 360 s, because its finest cells are 25 km.
+3. The static phase. On x4.163842 it took 3427 s at 15456988 KiB resident (run 46074272693, AMD EPYC 9V74),
+   before the GWDO stage stopped on a missing data set (fixed since).
+4. So one RGVR trial needs about 3427 + 60 + 10 × 200 (steps) + 48 × 200 (the 2 h forecast) ≈ 15100 s, and the
+   two trials about 30200 s (8.4 h) against 21300 s; RGVRL (3 h, no steps) would need about 2 × (3427 + 60 +
+   72 × 200) ≈ 35800 s. Even one trial of the short case would take more than 4 hours.
+
+A larger runner or several MPI ranks would change that; neither is used here (references are one-rank runs on
+standard runners). The package files stay so that the case can be run where it fits.
 
 ## Static fields
 
